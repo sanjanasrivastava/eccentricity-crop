@@ -73,6 +73,7 @@ for im in ims:	# Get each individual image
     imc = tf.concat([l, im, r], 1)
     t = b = tf.random_uniform([opt.hyper.background_size, opt.hyper.image_size + 2 * opt.hyper.background_size], maxval=255)
     imc = tf.concat([t, imc, b], 0)
+    imc = tf.image.per_image_standardization(imc)
     process_ims.append(imc)
 
 image = tf.stack(process_ims)
