@@ -60,7 +60,7 @@ class Dataset(object):
         self.transfer_append_name = "_transfer"
 
 
-class DNN(object):
+class DNN(object):	# TODO change for MNIST
 
     def __init__(self):
         self.name = "Alexnet"
@@ -75,7 +75,7 @@ class DNN(object):
         self.neuron_multiplier = np.ones([self.layers])
 
 
-class Hyperparameters(object):
+class Hyperparameters(object):	# TODO change for MNIST
 
     def __init__(self):
         self.batch_size = 128
@@ -84,12 +84,15 @@ class Hyperparameters(object):
         self.learning_rate_factor_per_decay = 0.95
         self.weight_decay = 0
         self.max_num_epochs = 60
-        self.crop_size = 28
-        self.image_size = 32
+        self.image_size = 28	# Changed for MNIST
         self.drop_train = 1
         self.drop_test = 1
         self.momentum = 0.9
         self.augmentation = False
+        
+        # Params specific to this study, set to defaults
+        self.background_size = 0
+        self.num_train_ex = 2**3
 
 
 class Experiments(object):
@@ -148,7 +151,7 @@ class Experiments(object):
 opt = []
 plot_freezing = []
 
-neuron_multiplier = [0.25, 0.5, 1, 2, 4]
+# neuron_multiplier = [0.25, 0.5, 1, 2, 4]
 # crop_sizes = [28, 24, 20, 16, 12]
 # training_data = [1]
 
@@ -175,7 +178,9 @@ for name_NN, num_layers_NN, max_epochs_NN in zip(name, num_layers, max_epochs):
             opt += [Experiments(idx, name_NN + '_' + str(background_size) + '_' + str(num_train_ex))]
     
             opt[-1].hyper.max_num_epochs = max_epochs_NN
-            opt[-1].hyper.crop_size = crop_size
+            opt[-1].hyper.crop_size = crop_size		# does crop_size still need to be here?
+            opt[-1].hyper.background_size = background_size
+            opt[-1].hyper.num_train_ex = num_train_ex
             opt[-1].dnn.name = name_NN
             opt[-1].dnn.set_num_layers(num_layers_NN)
             opt[-1].dnn.neuron_multiplier.fill(3)
@@ -183,7 +188,7 @@ for name_NN, num_layers_NN, max_epochs_NN in zip(name, num_layers, max_epochs):
             opt[-1].dataset.reuse_tfrecords(opt[0])
             opt[-1].hyper.max_num_epochs = int(max_epochs_NN)
             opt[-1].hyper.num_epochs_per_decay = \
-                int(opt[-1].hyper.num_epochs_per_decay)
-    
+                int(opt[-1].hyper.num_epochs_per_decay)   
+ 
             idx += 1
 
