@@ -48,7 +48,7 @@ def Alexnet(x, opt, labels_id, dropout_rate):
         pre_activation = tf.nn.bias_add(conv, biases)
         conv1 = tf.nn.relu(pre_activation, name=scope.name)
 
-        print(conv1.shape[1:])
+        print(conv1.shape)
 
         summ.variable_summaries(kernel, biases, opt)
         summ.activation_summaries(conv1, opt)
@@ -83,7 +83,7 @@ def Alexnet(x, opt, labels_id, dropout_rate):
         pre_activation = tf.nn.bias_add(conv, biases)
         conv2 = tf.nn.relu(pre_activation, name=scope.name)
 
-        print(conv2.shape[1:])
+        print(conv2.shape)
 
         summ.variable_summaries(kernel, biases, opt)
         summ.activation_summaries(conv2, opt)
@@ -111,7 +111,7 @@ def Alexnet(x, opt, labels_id, dropout_rate):
     # local3
     with tf.variable_scope('local3', reuse=reuse) as scope:
         # Move everything into depth so we can perform a single matrix multiply.
-        print(lrn2.shape[1:])
+        print(lrn2.shape)
 
         dim = int(prod(lrn2.get_shape()[1:]))
         pool_vec = tf.reshape(lrn2, [-1, dim])
@@ -126,7 +126,7 @@ def Alexnet(x, opt, labels_id, dropout_rate):
         local3t = tf.nn.relu(tf.matmul(pool_vec, weights) + biases, name=scope.name)
         local3 = tf.nn.dropout(local3t, dropout_rate)
 
-        print(np.prod(local3.shape[1:]))
+        print(np.prod(local3.shape))
 
         activations += [local3]
         parameters += [weights]
@@ -145,7 +145,7 @@ def Alexnet(x, opt, labels_id, dropout_rate):
         local4t = tf.nn.relu(tf.matmul(local3, weights) + biases, name=scope.name)
         local4 = tf.nn.dropout(local4t, dropout_rate)
 
-        print(np.prod(local4.shape[1:]))
+        print(np.prod(local4.shape))
 
         activations += [local4]
         parameters += [weights]

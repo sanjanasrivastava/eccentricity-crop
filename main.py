@@ -66,17 +66,22 @@ test_iterator_full = test_dataset_full.make_initializable_iterator()
 images_in, y_ = iterator.get_next()
 ims = tf.unstack(images_in, num=opt.hyper.batch_size, axis=0)
 
-process_ims = []
-# Prepare images by adding correct-sized random background to each 
-for im in ims:	# Get each individual image 
-    l = r = tf.random_uniform([opt.hyper.image_size, opt.hyper.background_size, 1], maxval=255)
-    imc = tf.concat([l, im, r], 1)
-    print('ORIGINAL IMAGE SHAPE:', imc.get_shape())
-    t = b = tf.random_uniform([opt.hyper.background_size, opt.hyper.image_size + 2 * opt.hyper.background_size, 1], maxval=255)
-    imc = tf.concat([t, imc, b], 0)
-    print('IMAGE SHAPE AFTER BACKGROUND ADDED:', imc.get_shape())
-    imc = tf.image.per_image_standardization(imc)
-    process_ims.append(imc)
+skip_background = True	# TODO toggle False after the mismatched input sizes issue 
+if not skip_background:
+    process_ims = []
+    # Prepare images by adding correct-sized random background to each 
+    for im in ims:	# Get each individual image 
+        l = r = tf.random_uniform([opt.hyper.image_size, opt.hyper.background_size, 1], maxval=255)
+        print('PRIGINAL IMAGE SHAPE:', im.get_shape())
+        imc = tf.concat([l, im, r], 1)
+        print('IMAGE SHAPE AFTER ONE CONCAT:', imc.get_shape())
+        t = b = tf.random_uniform([opt.hyper.background_size, opt.hyper.image_size + 2 * opt.hyper.background_size, 1], maxval=255)
+        imc = tf.concat([t, imc, b], 0)
+        print('IMAGE SHAPE AFTER BACKGROUND ADDED:', imc.get_shape())
+        imc = tf.image.per_image_standardization(imc)
+        process_ims.append(imc)
+else:
+    process_ims = [tf.image.per_image_standardization(im) for im in ims]
 
 image = tf.stack(process_ims)
 print('IMAGE SHAPE:', image.get_shape())

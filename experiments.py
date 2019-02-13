@@ -83,7 +83,7 @@ class DNN(object):	# TODO change for MNIST
 class Hyperparameters(object):	# TODO change for MNIST
 
     def __init__(self):
-        self.batch_size = 1 
+        self.batch_size = 2 
         self.learning_rate = 1e-2
         self.num_epochs_per_decay = 1.0
         self.learning_rate_factor_per_decay = 0.95
@@ -197,7 +197,7 @@ for name_NN, num_layers_NN, max_epochs_NN in zip(name, num_layers, max_epochs):
     for background_size in background_sizes:
         # for data in opt[:len(num_train_exs)]:	# get tf records for each num_train_ex
         i += 1
-        for data in [opt[12 + 0]]:	# just the 64-image, smallest-background-size-trained model
+        for data in [opt[13]]:	# just the 64-image, smallest-background-size-trained model
             opt += [Experiments(idx, name_NN + '_' + str(background_size) + '_' + str(num_train_ex))]
     
             opt[-1].hyper.max_num_epochs = max_epochs_NN
