@@ -46,7 +46,7 @@ test_dataset_full = dataset.create_dataset(augmentation=False, standarization=Fa
 
 # Hadles to switch datasets
 handle = tf.placeholder(tf.string, shape=[])
-iterator = tf.contrib.data.Iterator.from_string_handle(
+iterator = tf.data.Iterator.from_string_handle(
     handle, train_dataset.output_types, train_dataset.output_shapes)
 
 train_iterator = train_dataset.make_one_shot_iterator()
@@ -66,17 +66,20 @@ test_iterator_full = test_dataset_full.make_initializable_iterator()
 images_in, y_ = iterator.get_next()
 ims = tf.unstack(images_in, num=opt.hyper.batch_size, axis=0)
 
-# Prepare images 
+process_ims = []
+# Prepare images by adding correct-sized random background to each 
 for im in ims:	# Get each individual image 
-     
-    l = r = tf.random_uniform([opt.hyper.image_size, opt.hyper.background_size], maxval=255)
+    l = r = tf.random_uniform([opt.hyper.image_size, opt.hyper.background_size, 1], maxval=255)
     imc = tf.concat([l, im, r], 1)
-    t = b = tf.random_uniform([opt.hyper.background_size, opt.hyper.image_size + 2 * opt.hyper.background_size], maxval=255)
+    print('ORIGINAL IMAGE SHAPE:', imc.get_shape())
+    t = b = tf.random_uniform([opt.hyper.background_size, opt.hyper.image_size + 2 * opt.hyper.background_size, 1], maxval=255)
     imc = tf.concat([t, imc, b], 0)
+    print('IMAGE SHAPE AFTER BACKGROUND ADDED:', imc.get_shape())
     imc = tf.image.per_image_standardization(imc)
     process_ims.append(imc)
 
 image = tf.stack(process_ims)
+print('IMAGE SHAPE:', image.get_shape())
 
 # Call DNN
 dropout_rate = tf.placeholder(tf.float32)
@@ -190,8 +193,10 @@ with tf.Session() as sess:
         ################################################################################################
         # Loop alternating between training and validation.
         ################################################################################################
+        print('SMALL:', int(sess.run(global_step)))
+        print('LARGE:', opt.hyper.max_num_epochs)
         for iEpoch in range(int(sess.run(global_step)), opt.hyper.max_num_epochs):
-
+            print(iEpoch)
             # Save metadata every epoch
             run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
             run_metadata = tf.RunMetadata()
@@ -238,56 +243,57 @@ with tf.Session() as sess:
         train_writer.close()
         val_writer.close()
 
+    print('TRAIN COMPLETE')
     ################################################################################################
     # RUN TEST
     ################################################################################################
 
-    if flag_testable:
-
-        test_handle_full = sess.run(test_iterator_full.string_handle())
-        validation_handle_full = sess.run(val_iterator_full.string_handle())
-        train_handle_full = sess.run(train_iterator_full.string_handle())
-
-        # Run one pass over a batch of the validation dataset.
-        sess.run(train_iterator_full.initializer)
-        acc_tmp = 0.0
-        for num_iter in range(15):
-            acc_val = sess.run([accuracy], feed_dict={handle: train_handle_full,
-                                                      dropout_rate: opt.hyper.drop_test})
-            acc_tmp += acc_val[0]
-
-        val_acc = acc_tmp / float(15)
-        print("Full train acc = " + str(val_acc))
-        sys.stdout.flush()
-
-
-        # Run one pass over a batch of the validation dataset.
-        sess.run(val_iterator_full.initializer)
-        acc_tmp = 0.0
-        for num_iter in range(15):
-            acc_val = sess.run([accuracy], feed_dict={handle: validation_handle_full,
-                                                      dropout_rate: opt.hyper.drop_test})
-            acc_tmp += acc_val[0]
-
-        val_acc = acc_tmp / float(15)
-        print("Full val acc = " + str(val_acc))
-        sys.stdout.flush()
-
-
-        # Run one pass over a batch of the test dataset.
-        sess.run(test_iterator_full.initializer)
-        acc_tmp = 0.0
-        for num_iter in range(int(dataset.num_images_test / opt.hyper.batch_size)):
-            acc_val = sess.run([accuracy], feed_dict={handle: test_handle_full,
-                                                      dropout_rate: opt.hyper.drop_test})
-            acc_tmp += acc_val[0]
-
-        val_acc = acc_tmp / float(int(dataset.num_images_test / opt.hyper.batch_size))
-        print("Full test acc: " + str(val_acc))
-        sys.stdout.flush()
-
-        print(":)")
-
-    else:
-        print("MODEL WAS NOT TRAINED")
-
+#     if flag_testable:
+# 
+#         test_handle_full = sess.run(test_iterator_full.string_handle())
+#         validation_handle_full = sess.run(val_iterator_full.string_handle())
+#         train_handle_full = sess.run(train_iterator_full.string_handle())
+# 
+#         # Run one pass over a batch of the train dataset.
+#         sess.run(train_iterator_full.initializer)
+#         acc_tmp = 0.0
+#         for num_iter in range(15):
+#             print('TRAIN HANDLE TYPE:', type(train_handle_full))
+#             acc_val = sess.run([accuracy], feed_dict={handle: train_handle_full, dropout_rate: opt.hyper.drop_test})
+#             acc_tmp += acc_val[0]
+#  
+#         val_acc = acc_tmp / float(15)
+#         print("Full train acc = " + str(val_acc))
+#         sys.stdout.flush()
+# 
+# 
+#         # Run one pass over a batch of the validation dataset.
+#         sess.run(val_iterator_full.initializer)
+#         acc_tmp = 0.0
+#         for num_iter in range(15):
+#             acc_val = sess.run([accuracy], feed_dict={handle: validation_handle_full,
+#                                                       dropout_rate: opt.hyper.drop_test})
+#             acc_tmp += acc_val[0]
+# 
+#         val_acc = acc_tmp / float(15)
+#         print("Full val acc = " + str(val_acc))
+#         sys.stdout.flush()
+# 
+# 
+#         # Run one pass over a batch of the test dataset.
+#         sess.run(test_iterator_full.initializer)
+#         acc_tmp = 0.0
+#         for num_iter in range(int(dataset.num_images_test / opt.hyper.batch_size)):
+#             acc_val = sess.run([accuracy], feed_dict={handle: test_handle_full,
+#                                                       dropout_rate: opt.hyper.drop_test})
+#             acc_tmp += acc_val[0]
+# 
+#         val_acc = acc_tmp / float(int(dataset.num_images_test / opt.hyper.batch_size))
+#         print("Full test acc: " + str(val_acc))
+#         sys.stdout.flush()
+# 
+#         print(":)")
+# 
+#     else:
+#         print("MODEL WAS NOT TRAINED")
+# 

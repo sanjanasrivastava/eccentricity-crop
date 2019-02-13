@@ -35,6 +35,11 @@ class Dataset(object):
             if 'Dataset:' in line:
                 self.dataset_path = line.split(" ")[1].replace('\r', '').replace('\n', '')
 
+    # function made by sanjana to alter amount of training data
+    def set_num_train_ex(self, num_train_ex):
+        self.proportion_training_set = float(num_train_ex) / 60000	# TODO currently hard-coded because Experiments currently invokes Dataset() but not MNIST() and I'm not sure how to get to MNIST specifically, but it appears to happen at some point  
+    
+
     # # #
     # Dataset general
     # Set base tfrecords
@@ -78,7 +83,7 @@ class DNN(object):	# TODO change for MNIST
 class Hyperparameters(object):	# TODO change for MNIST
 
     def __init__(self):
-        self.batch_size = 128
+        self.batch_size = 1 
         self.learning_rate = 1e-2
         self.num_epochs_per_decay = 1.0
         self.learning_rate_factor_per_decay = 0.95
@@ -89,11 +94,15 @@ class Hyperparameters(object):	# TODO change for MNIST
         self.drop_test = 1
         self.momentum = 0.9
         self.augmentation = False
-        
+       
         # Params specific to this study, set to defaults
         self.background_size = 0
         self.num_train_ex = 2**3
 
+    def set_background_size(self, background_size):
+#         self.image_size += background_size
+        self.background_size = background_size
+        
 
 class Experiments(object):
 
@@ -158,37 +167,50 @@ plot_freezing = []
 name = ["Alexnet"]
 num_layers = [5]
 max_epochs = [100]
-background_sizes = []	# TODO
+background_sizes = [int(28 * 2**i) for i in range(-3, 2)]	# total of 6 
 num_train_exs = [2**i for i in range(3, 11)]	# total of 8 experiments
 
 
+# idx = 0
+# # Create base for TF records:
+# opt += [Experiments(idx, "data")]
+# opt[-1].hyper.max_num_epochs = 0
+# idx += 1
+
+
 idx = 0
-# Create base for TF records:
-opt += [Experiments(idx, "data")]
-opt[-1].hyper.max_num_epochs = 0
-idx += 1
+for num_train_ex in num_train_exs:
+    for background_size in background_sizes:
+         data = Experiments(idx, 'numtrainex' + str(num_train_ex) + '_backgroundsize' + str(background_size))
+         data.dataset.set_num_train_ex(num_train_ex)
+         data.hyper.set_background_size(background_size)
+         opt.append(data)
+         opt[-1].hyper.max_num_epochs = 2	# TODO change to max_epochs[0]
+         opt[-1].hyper.num_train_ex = num_train_ex
+     
+         idx += 1
 
 
 for name_NN, num_layers_NN, max_epochs_NN in zip(name, num_layers, max_epochs):
-#    for crop_size in range(len(crop_sizes)):
-#        opt += [Experiments(idx, name_NN + "_augmentation_" + str(crop_size))]
-     for background_size in range(len(crop_sizes)):
-        for num_train_ex in range(len(num_train_exs)):
 
+    i = 0
+    for background_size in background_sizes:
+        # for data in opt[:len(num_train_exs)]:	# get tf records for each num_train_ex
+        i += 1
+        for data in [opt[12 + 0]]:	# just the 64-image, smallest-background-size-trained model
             opt += [Experiments(idx, name_NN + '_' + str(background_size) + '_' + str(num_train_ex))]
     
             opt[-1].hyper.max_num_epochs = max_epochs_NN
-            opt[-1].hyper.crop_size = crop_size		# does crop_size still need to be here?
             opt[-1].hyper.background_size = background_size
-            opt[-1].hyper.num_train_ex = num_train_ex
+            opt[-1].hyper.num_train_ex = data.hyper.num_train_ex 
             opt[-1].dnn.name = name_NN
             opt[-1].dnn.set_num_layers(num_layers_NN)
             opt[-1].dnn.neuron_multiplier.fill(3)
     
-            opt[-1].dataset.reuse_tfrecords(opt[0])
+            opt[-1].dataset.reuse_tfrecords(data) # opt[0])
             opt[-1].hyper.max_num_epochs = int(max_epochs_NN)
             opt[-1].hyper.num_epochs_per_decay = \
                 int(opt[-1].hyper.num_epochs_per_decay)   
- 
+     
             idx += 1
 

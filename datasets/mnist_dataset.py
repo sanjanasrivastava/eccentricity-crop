@@ -1,6 +1,6 @@
 import glob
 import tensorflow as tf
-from tf.contrib.learn.python.learn.datasets import mnist
+from tensorflow.contrib.learn.python.learn.datasets import mnist
 import pickle
 import numpy as np
 from random import randint
@@ -33,20 +33,20 @@ class MNIST(dataset.Dataset):
 
     # Virtual functions:
     def get_data_trainval(self):
-        
-        mnist = read_data_sets('../eccentricity-data/mnist', reshape=False, validation_size=self.num_images_val)	# 95% train, 5% validation as was used for cifar
-        train_addrs = list(mnist.train.images)
-        train_labels = list(mnist.train.labels)		# TODO these are np.uint8. Do they need to be int?
-        val_addrs = list(mnist.validation.images)
-        val_labels = list(mnist.validation.labels)
+        print('NUM IMAGES VAL:', self.num_images_val)
+        mnist_data = mnist.read_data_sets('../eccentricity-data/mnist', reshape=False, validation_size=int(self.num_images_val))	# 95% train, 5% validation as was used for cifar
+        train_addrs = list(mnist_data.train.images)
+        train_labels = list(mnist_data.train.labels)		# TODO these are np.uint8. Do they need to be int?
+        val_addrs = list(mnist_data.validation.images)
+        val_labels = list(mnist_data.validation.labels)
 
         return train_addrs, train_labels, val_addrs, val_labels
 
     def get_data_test(self):
 
-        mnist = read_data_sets('../eccentricity-data/mnist', reshape=False, validation_size=3000)
-        test_addrs = list(mnist.test.images)
-        test_labels = list(mnist.test.labels)
+        mnist_data = mnist.read_data_sets('../eccentricity-data/mnist', reshape=False, validation_size=int(self.num_images_val))
+        test_addrs = list(mnist_data.test.images)
+        test_labels = list(mnist_data.test.labels)
 
         return test_addrs, test_labels
 

@@ -56,8 +56,8 @@ class Dataset:
             # Create a feature
             feature = {set_name + '/label': self._int64_feature(labels[i]),
                        set_name + '/image': self._bytes_feature(addrs[i].tostring()),
-                       set_name + '/width': self._int64_feature(32),
-                       set_name + '/height': self._int64_feature(32)
+                       set_name + '/width': self._int64_feature(28),
+                       set_name + '/height': self._int64_feature(28)
                        }
 
             # Create an example protocol buffer
@@ -116,7 +116,7 @@ class Dataset:
             image = tf.decode_raw(parsed_features[set_name_app + '/image'], tf.uint8)
             image = tf.cast(image,tf.float32)
             S = tf.stack([tf.cast(parsed_features[set_name_app + '/height'], tf.int32),
-                          tf.cast(parsed_features[set_name_app + '/width'], tf.int32), 3])
+                          tf.cast(parsed_features[set_name_app + '/width'], tf.int32), 1])
             image = tf.reshape(image, S)
 
             float_image = self.preprocess_image(augmentation, standarization, image)
@@ -131,8 +131,10 @@ class Dataset:
             tfrecords_path = self.opt.log_dir_base + self.opt.dataset.reuse_TFrecords_path + '/data/'
 
         filenames = [tfrecords_path + set_name_app + '.tfrecords']
-        dataset = tf.contrib.data.TFRecordDataset(filenames)
-        dataset = dataset.map(_parse_function, num_threads=self.num_threads, output_buffer_size=self.output_buffer_size)
+        dataset = tf.data.TFRecordDataset(filenames)
+#         dataset = dataset.map(_parse_function, num_parallel_calls=self.num_threads, output_buffer_size=self.output_buffer_size)
+        dataset = dataset.map(_parse_function, num_parallel_calls=self.num_threads)
+        dataset = dataset.prefetch(self.output_buffer_size)	# TODO do I need to do this
 
         if repeat:
             dataset = dataset.repeat()  # Repeat the input indefinitely.
