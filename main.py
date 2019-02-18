@@ -1,10 +1,9 @@
 import os.path
 import shutil
 import sys
+print('PAth:', sys.argv[0])
 import numpy as np
-
 import tensorflow as tf
-
 import experiments
 from datasets import mnist_dataset 
 from nets import nets
@@ -16,8 +15,11 @@ from util import summary
 ################################################################################################
 
 ID = int(sys.argv[1:][0])
-
 opt = experiments.opt[ID]
+
+print('ID:', ID)
+print('Num training examples:', opt.hyper.num_train_ex)
+print('Background size:', opt.hyper.background_size)
 
 # Skip execution if instructed in experiment
 if opt.skip:
@@ -46,8 +48,8 @@ test_dataset_full = dataset.create_dataset(augmentation=False, standarization=Fa
 
 # Hadles to switch datasets
 handle = tf.placeholder(tf.string, shape=[])
-iterator = tf.data.Iterator.from_string_handle(
-    handle, train_dataset.output_types, train_dataset.output_shapes)
+iterator = tf.data.Iterator.from_string_handle(handle, train_dataset.output_types, train_dataset.output_shapes)
+# iterator = tf.contrib.data.Iterator.from_string_handle(handle, train_dataset.output_types, train_dataset.output_shapes)
 
 train_iterator = train_dataset.make_one_shot_iterator()
 val_iterator = val_dataset.make_one_shot_iterator()
@@ -64,31 +66,34 @@ test_iterator_full = test_dataset_full.make_initializable_iterator()
 
 # Get data from dataset dataset
 images_in, y_ = iterator.get_next()
+images_in.set_shape([opt.hyper.batch_size, opt.hyper.image_size, opt.hyper.image_size, 1])
 ims = tf.unstack(images_in, num=opt.hyper.batch_size, axis=0)
 
-skip_background = True	# TODO toggle False after the mismatched input sizes issue 
+skip_background = False # TODO toggle False after the mismatched input sizes issue 
+standardization = False	# TODO toggle based on what's best 
 if not skip_background:
     process_ims = []
     # Prepare images by adding correct-sized random background to each 
     for im in ims:	# Get each individual image 
+        # imc = im * 255 / tf.reduce_max(im)
         l = r = tf.random_uniform([opt.hyper.image_size, opt.hyper.background_size, 1], maxval=255)
-        print('PRIGINAL IMAGE SHAPE:', im.get_shape())
         imc = tf.concat([l, im, r], 1)
-        print('IMAGE SHAPE AFTER ONE CONCAT:', imc.get_shape())
         t = b = tf.random_uniform([opt.hyper.background_size, opt.hyper.image_size + 2 * opt.hyper.background_size, 1], maxval=255)
         imc = tf.concat([t, imc, b], 0)
-        print('IMAGE SHAPE AFTER BACKGROUND ADDED:', imc.get_shape())
-        imc = tf.image.per_image_standardization(imc)
+        if standardization:
+            imc = tf.image.per_image_standardization(imc)
         process_ims.append(imc)
 else:
-    process_ims = [tf.image.per_image_standardization(im) for im in ims]
+    process_ims = [tf.image.per_image_standardization(im) if standardization else im for im in ims]
 
+tf.summary.scalar('im max', tf.reduce_max(imc))
+tf.summary.scalar('im min', tf.reduce_min(imc))
 image = tf.stack(process_ims)
-print('IMAGE SHAPE:', image.get_shape())
 
 # Call DNN
 dropout_rate = tf.placeholder(tf.float32)
 to_call = getattr(nets, opt.dnn.name)
+print('TO CALL:', to_call)
 y, parameters, _ = to_call(image, dropout_rate, opt, dataset.list_labels)
 
 # Loss function
@@ -132,11 +137,13 @@ with tf.name_scope('accuracy'):
     correct_prediction = tf.cast(correct_prediction, tf.float32)
     accuracy = tf.reduce_mean(correct_prediction)
     tf.summary.scalar('accuracy', accuracy)
+
+tf.summary.image('input', tf.expand_dims(
+            tf.reshape(tf.cast(image, tf.float32), [-1, opt.hyper.image_size + 2 * opt.hyper.background_size, opt.hyper.image_size + 2 * opt.hyper.background_size]), 3))
 ################################################################################################
 
 
 with tf.Session() as sess:
-
 
     ################################################################################################
     # Set up Gradient Descent
@@ -194,12 +201,9 @@ with tf.Session() as sess:
         train_writer = tf.summary.FileWriter(opt.log_dir_base + opt.name + '/train', sess.graph)
         val_writer = tf.summary.FileWriter(opt.log_dir_base + opt.name + '/val')
 
-        print("STARTING EPOCH = ", sess.run(global_step))
         ################################################################################################
         # Loop alternating between training and validation.
         ################################################################################################
-        print('SMALL:', int(sess.run(global_step)))
-        print('LARGE:', opt.hyper.max_num_epochs)
         for iEpoch in range(int(sess.run(global_step)), opt.hyper.max_num_epochs):
             print(iEpoch)
             # Save metadata every epoch

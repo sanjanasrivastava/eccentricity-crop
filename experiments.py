@@ -167,7 +167,7 @@ plot_freezing = []
 name = ["Alexnet"]
 num_layers = [5]
 max_epochs = [100]
-background_sizes = [int(28 * 2**i) for i in range(-3, 2)]	# total of 6 
+background_sizes = [0] + [int(28 * 2**i) for i in range(-3, 3)]	# total of 7 
 num_train_exs = [2**i for i in range(3, 11)]	# total of 8 experiments
 
 
@@ -180,15 +180,15 @@ num_train_exs = [2**i for i in range(3, 11)]	# total of 8 experiments
 
 idx = 0
 for num_train_ex in num_train_exs:
-    for background_size in background_sizes:
-         data = Experiments(idx, 'numtrainex' + str(num_train_ex) + '_backgroundsize' + str(background_size))
-         data.dataset.set_num_train_ex(num_train_ex)
-         data.hyper.set_background_size(background_size)
-         opt.append(data)
-         opt[-1].hyper.max_num_epochs = 2	# TODO change to max_epochs[0]
-         opt[-1].hyper.num_train_ex = num_train_ex
-     
-         idx += 1
+    # for background_size in background_sizes:
+    data = Experiments(idx, 'numtrainex' + str(num_train_ex)) 
+    data.dataset.set_num_train_ex(num_train_ex)
+#     data.hyper.set_background_size(background_size)
+    opt.append(data)
+    opt[-1].hyper.max_num_epochs = 2	# TODO change to max_epochs[0]
+    opt[-1].hyper.num_train_ex = num_train_ex
+
+    idx += 1
 
 
 for name_NN, num_layers_NN, max_epochs_NN in zip(name, num_layers, max_epochs):
@@ -197,8 +197,8 @@ for name_NN, num_layers_NN, max_epochs_NN in zip(name, num_layers, max_epochs):
     for background_size in background_sizes:
         # for data in opt[:len(num_train_exs)]:	# get tf records for each num_train_ex
         i += 1
-        for data in [opt[13]]:	# just the 64-image, smallest-background-size-trained model
-            opt += [Experiments(idx, name_NN + '_' + str(background_size) + '_' + str(num_train_ex))]
+        for data in opt[:len(num_train_exs)]:	# just the 64-image, smallest-background-size-trained model
+            opt += [Experiments(idx, name_NN + '_' + str('backgroundsize') + str(background_size) + '_' + 'numtrainex' + str(data.hyper.num_train_ex))]
     
             opt[-1].hyper.max_num_epochs = max_epochs_NN
             opt[-1].hyper.background_size = background_size

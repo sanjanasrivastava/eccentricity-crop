@@ -90,11 +90,17 @@ class Dataset:
         print(self.opt.dataset.dataset_path)
 
         train_addrs, train_labels, val_addrs, val_labels = self.get_data_trainval()
+        print('IN CREATE_TFRECORDS')
+        print('TRAIN MIN:', train_addrs[0].min())
+        print('TRAIN MAX:', train_addrs[0].max())
+        print('LEAVING CREATE_TFRECORDS')
+
         app = self.opt.dataset.transfer_append_name
         self.write_tfrecords(tfrecords_path, 'train' + app, train_addrs, train_labels)
         self.write_tfrecords(tfrecords_path, 'val' + app, val_addrs, val_labels)
 
         test_addrs, test_labels = self.get_data_test()
+
         self.write_tfrecords(tfrecords_path, 'test' + app, test_addrs, test_labels)
 
     def delete_tfrecords(self):
@@ -113,12 +119,15 @@ class Dataset:
                         set_name_app + '/height': tf.FixedLenFeature([], tf.int64),
                         set_name_app + '/width': tf.FixedLenFeature([], tf.int64)}
             parsed_features = tf.parse_single_example(example_proto, features)
-            image = tf.decode_raw(parsed_features[set_name_app + '/image'], tf.uint8)
+            image = tf.decode_raw(parsed_features[set_name_app + '/image'], tf.int32)
             image = tf.cast(image,tf.float32)
             S = tf.stack([tf.cast(parsed_features[set_name_app + '/height'], tf.int32),
                           tf.cast(parsed_features[set_name_app + '/width'], tf.int32), 1])
             image = tf.reshape(image, S)
-
+            print('IN _PARSE_FUNCTION')
+            tf.summary.scalar('train_max', tf.reduce_max(image))
+            tf.summary.scalar('train_min', tf.reduce_min(image))
+            print('LEAVING _PARSE_FUNCTION')
             float_image = self.preprocess_image(augmentation, standarization, image)
 
             return float_image, parsed_features[set_name_app + '/label']
@@ -132,11 +141,14 @@ class Dataset:
 
         filenames = [tfrecords_path + set_name_app + '.tfrecords']
         dataset = tf.data.TFRecordDataset(filenames)
-#         dataset = dataset.map(_parse_function, num_parallel_calls=self.num_threads, output_buffer_size=self.output_buffer_size)
         dataset = dataset.map(_parse_function, num_parallel_calls=self.num_threads)
         dataset = dataset.prefetch(self.output_buffer_size)	# TODO do I need to do this
+#         dataset = tf.contrib.data.TFRecordDataset(filenames)
+#         dataset = dataset.map(_parse_function, num_threads=self.num_threads, output_buffer_size=self.output_buffer_size)
 
         if repeat:
             dataset = dataset.repeat()  # Repeat the input indefinitely.
 
         return dataset.batch(self.opt.hyper.batch_size)
+
+
