@@ -93,11 +93,6 @@ class Dataset:
         train_addrs, train_labels, val_addrs, val_labels = self.get_data_trainval()
         train_addrs = [(train_addr * 255).astype(np.int32) for train_addr in train_addrs]
         val_addrs = [(val_addr * 255).astype(np.int32) for val_addr in val_addrs]
-        print('IN CREATE_TFRECORDS')
-        print('TRAIN MIN:', train_addrs[0].min())
-        print('TRAIN MAX:', train_addrs[0].max())
-        print('TRAIN TYPE:', type(train_addrs[0][0][0][0]))
-        print('LEAVING CREATE_TFRECORDS')
 
         app = self.opt.dataset.transfer_append_name
         self.write_tfrecords(tfrecords_path, 'train' + app, train_addrs, train_labels)
@@ -155,5 +150,6 @@ class Dataset:
             dataset = dataset.repeat()  # Repeat the input indefinitely.
 
         return dataset.batch(self.opt.hyper.batch_size)
+
 
 

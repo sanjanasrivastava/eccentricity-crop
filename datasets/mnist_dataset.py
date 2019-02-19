@@ -33,24 +33,29 @@ class MNIST(dataset.Dataset):
 
     # Virtual functions:
     def get_data_trainval(self):
-        print('NUM IMAGES TRAIN:', self.num_images_epoch)
-        print('NUM IMAGES VAL:', self.num_images_val)
-        mnist_data = mnist.read_data_sets('../eccentricity-data/mnist', reshape=False, validation_size=int(self.num_images_val))	# 95% train, 5% validation as was used for cifar
 
-        train_addrs = list(mnist_data.train.images)
-        train_labels = list(mnist_data.train.labels)		# TODO these are np.uint8. Do they need to be int?
-        val_addrs = list(mnist_data.validation.images)
-        val_labels = list(mnist_data.validation.labels)
+        mnist_data = mnist.read_data_sets('../eccentricity-data/mnist', reshape=False, validation_size=0)	# 95% train, 5% validation as was used for cifar
 
-        print(len(train_labels))
-        print(mnist_data.train.labels)
+        ptrain_addrs = list(mnist_data.train.images)
+        ptrain_labels = list(mnist_data.train.labels)		# TODO these are np.uint8. Do they need to be int?
+        pval_addrs = list(mnist_data.validation.images)
+        pval_labels = list(mnist_data.validation.labels)
 
-        print('LABEL SHAPE:', train_labels[0].shape) 
-        labels = np.argmax(train_labels, axis=1)
-        print('0th:', labels[0])
-        print('1000th:', labels[999])
-        print('5001st:', labels[5000])
-        crash
+        counts = [0 for __ in range(len(self.list_labels))]
+        train_addrs = []
+        train_labels = []
+        val_addrs = []
+        val_labels = []
+
+        for i in range(self.num_images_training):
+            L = ptrain_labels[i]     # get the label L for the ith image
+            if counts[L] < self.opt.hyper.num_train_ex:      # if we haven't yet reached <num_train_ex> examples for class L...
+                train_addrs.append(ptrain_addrs[i])     # ...add the ith image and label to our final training set
+                train_labels.append(ptrain_labels[i])
+                counts[L] += 1      # increment counter
+            else:   # if we have reached <num_train_ex> examples for class L...
+                val_addrs.append(ptrain_addrs[i])    # ...add the ith image and label to our final validation set
+                val_labels.append(ptrain_labels[i])
 
         return train_addrs, train_labels, val_addrs, val_labels
 
@@ -95,3 +100,5 @@ class MNIST(dataset.Dataset):
             float_image = distorted_image
 
         return float_image
+
+
