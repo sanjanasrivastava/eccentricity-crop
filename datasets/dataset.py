@@ -73,7 +73,8 @@ class Dataset:
     def create_tfrecords(self):
 
         if not self.opt.dataset.reuse_TFrecords:
-            tfrecords_path = self.opt.log_dir_base + self.opt.name + '/data/'
+            # tfrecords_path = self.opt.log_dir_base + self.opt.name + '/data/'
+            tfrecords_path = '../../eccentricity-data/models'
         else:
             tfrecords_path = self.opt.log_dir_base + self.opt.dataset.reuse_TFrecords_path + '/data/'
             print("REUSING TFRECORDS")
@@ -90,10 +91,8 @@ class Dataset:
         print(self.opt.dataset.dataset_path)
 
         train_addrs, train_labels, val_addrs, val_labels = self.get_data_trainval()
-        print('IN CREATE_TFRECORDS')
-        print('TRAIN MIN:', train_addrs[0].min())
-        print('TRAIN MAX:', train_addrs[0].max())
-        print('LEAVING CREATE_TFRECORDS')
+
+        print(train_labels[:10])
 
         app = self.opt.dataset.transfer_append_name
         self.write_tfrecords(tfrecords_path, 'train' + app, train_addrs, train_labels)
@@ -150,5 +149,6 @@ class Dataset:
             dataset = dataset.repeat()  # Repeat the input indefinitely.
 
         return dataset.batch(self.opt.hyper.batch_size)
+
 
 
