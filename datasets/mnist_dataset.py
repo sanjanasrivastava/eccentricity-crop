@@ -19,8 +19,10 @@ class MNIST(dataset.Dataset):
         self.list_labels = range(0, 10)
         self.num_images_training = 60000
         self.num_images_test = 10000
+        self.num_classes = 10 
 
-        self.num_images_epoch = self.opt.dataset.proportion_training_set*self.num_images_training
+#         self.num_images_epoch = self.opt.dataset.proportion_training_set*self.num_images_training
+        self.num_images_epoch = opt.hyper.num_train_ex * self.num_classes
         self.num_images_val = self.num_images_training - self.num_images_epoch
 
         self.create_tfrecords()

@@ -10,6 +10,6 @@
 
 cd /om2/user/sanjanas/eccentricity-crop
 singularity exec -B /om2:/om2 --nv /om/user/xboix/singularity/xboix-tensorflow.simg \
-python /om2/user/sanjanas/eccentricity-crop/main.py ${SLURM_ARRAY_TASK_ID}
+python /om2/user/sanjanas/eccentricity-crop/main.py $((${SLURM_ARRAY_TASK_ID} + 2880))
 
 

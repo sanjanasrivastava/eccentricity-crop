@@ -94,6 +94,9 @@ class Dataset:
         train_addrs = [(train_addr * 255).astype(np.int32) for train_addr in train_addrs]
         val_addrs = [(val_addr * 255).astype(np.int32) for val_addr in val_addrs]
 
+        print('NUM TRAINING EXAMPLES:', len(train_addrs))
+        print('NUM VALIDATION EXAMPLES:', len(val_addrs))
+
         app = self.opt.dataset.transfer_append_name
         self.write_tfrecords(tfrecords_path, 'train' + app, train_addrs, train_labels)
         self.write_tfrecords(tfrecords_path, 'val' + app, val_addrs, val_labels)
@@ -124,10 +127,8 @@ class Dataset:
             S = tf.stack([tf.cast(parsed_features[set_name_app + '/height'], tf.int32),
                           tf.cast(parsed_features[set_name_app + '/width'], tf.int32), 1])
             image = tf.reshape(image, S)
-            print('IN _PARSE_FUNCTION')
             tf.summary.scalar('train_max', tf.reduce_max(image))
             tf.summary.scalar('train_min', tf.reduce_min(image))
-            print('LEAVING _PARSE_FUNCTION')
             float_image = self.preprocess_image(augmentation, standarization, image)
 
             return float_image, parsed_features[set_name_app + '/label']

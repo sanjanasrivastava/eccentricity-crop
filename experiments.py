@@ -1,3 +1,4 @@
+import itertools
 import numpy as np
 LIMIT_TESTS = False	# Toggle based on whether we want to run exhaustive experiments or a subset 
 
@@ -109,7 +110,8 @@ class Experiments(object):
 
     def __init__(self, id, name):
         self.name = "base"
-        self.log_dir_base = '/om/user/sanjanas/eccentricity-data/models/' 
+        self.log_dir_base = '/om2/user/sanjanas/eccentricity-data/models/'
+            # '/om/user/sanjanas/eccentricity-data/models/' 
             #"/om/user/xboix/share/minimal-pooling/models/"
             #"/Users/xboix/src/minimal-cifar/log/"
             #"/om/user/xboix/src/robustness/robustness/log/"
@@ -162,25 +164,24 @@ opt = []
 plot_freezing = []
 
 # General hyperparameters
-name = ["Alexnet"]
-num_layers = [5]
-max_epochs = [100]
-learning_rates = [10**i for i in range(-6, -1)]
-batch_sizes = [2**i for i in range(7)] if not LIMIT_TESTS else [16]		# TODO adjust for experiments with total training examples smaller than the batch size (do I have to? Will it just do one incomplete batch? Even if so, is that a waste of resources?)
+name = ['mnist_cnn']	# ["Alexnet"]
+num_layers = [3]	# [5]
+max_epochs = [20]	# [100]
+learning_rates = [10**i for i in range(-6, 0)]	# 6 values
+# batch_sizes = [2**i for i in range(8)] if not LIMIT_TESTS else [128]	# 8 values
+batch_sizes = [1, 4, 10, 20, 40, 80, 160, 320] if not LIMIT_TESTS else [40]
 initialization = None	# TODO 
 
 # Experiment-specific hyperparameters
-background_sizes = [0] + [int(28 * 2**i) for i in range(-3, 3)]	if not LIMIT_TESTS else [0, 7, 56]	# total of 7 
-num_train_exs = [2**i for i in range(3, 11)] if not LIMIT_TESTS else [5000]	# total of 8 experiments
+background_sizes = [0] + [int(28 * 2**i) for i in range(-3, 3)]	if not LIMIT_TESTS else [0, 7, 56]	# 7 values
+num_train_exs = [2**i for i in range(3, 12)] + [5000]	# 10 values, last is full training set
 
 idx = 0
 for num_train_ex in num_train_exs:
-    # for background_size in background_sizes:
     data = Experiments(idx, 'numtrainex' + str(num_train_ex)) 
-    data.dataset.set_num_train_ex(num_train_ex)
-#     data.hyper.set_background_size(background_size)
+#     data.dataset.set_num_train_ex(num_train_ex)
     opt.append(data)
-    opt[-1].hyper.max_num_epochs = 2	# TODO change to max_epochs[0]
+    opt[-1].hyper.max_num_epochs = 0
     opt[-1].hyper.num_train_ex = num_train_ex
 
     idx += 1
@@ -188,14 +189,10 @@ for num_train_ex in num_train_exs:
 
 for name_NN, num_layers_NN, max_epochs_NN in zip(name, num_layers, max_epochs):
 
-    i = 0
     for background_size in background_sizes:
-        # for data in opt[:len(num_train_exs)]:	# get tf records for each num_train_ex
-        i += 1
         for data in opt[:len(num_train_exs)]:
-
-            for learning_rate in learning_rates:
-                for batch_size in batch_sizes:	
+            for batch_size in batch_sizes:	
+                for learning_rate in learning_rates:
                     opt += [Experiments(idx, name_NN + '_' + str('backgroundsize') + str(background_size) + '_' + 'numtrainex' + str(data.hyper.num_train_ex))]
             
                     opt[-1].hyper.max_num_epochs = max_epochs_NN
@@ -215,4 +212,39 @@ for name_NN, num_layers_NN, max_epochs_NN in zip(name, num_layers, max_epochs):
              
                     idx += 1
 
+'''
+EXPERIMENT ID GUIDE
+tfRecords writing for each <num_train_ex>: 0-9
+batch_size=128, all <num_train_ex>, background_sizes=0,7,56: 
 
+'''
+
+def calculate_IDs(rbackground_size, rnum_train_ex, rbatch_size, rlearning_rate):
+
+    data_offset = 10 
+
+    BG = len(background_sizes)
+    NTE = len(num_train_exs)
+    BS = len(batch_sizes)
+    LR = len(learning_rates)
+    
+    IDs, ID_subs, BG_adds = ([] for __ in range(3))
+    for bg, nte, bs, lr in itertools.product(rbackground_size, rnum_train_ex, rbatch_size, rlearning_rate): 
+        i_bg = background_sizes.index(bg)
+        i_nte = num_train_exs.index(nte)
+        i_bs = batch_sizes.index(bs)
+        i_lr = learning_rates.index(lr)
+
+        ID = i_lr + (i_bs * LR) + (i_nte * LR * BS) + (i_bg * LR * BS * NTE) + data_offset
+        ID_sub = i_lr + (i_bs * LR) + (i_nte * LR * BS) + data_offset
+        BG_add = i_bg * LR * BS * NTE
+
+        IDs.append(ID) 
+        ID_subs.append(ID_sub)
+        BG_adds.append(BG_add)
+
+    return IDs, ID_subs, BG_adds
+
+if __name__ == '__main__':
+    print(calculate_IDs([0, 7, 56], [8, 64, 128, 256], [40], learning_rates[:]))
+    # print(calculate_IDs(background_sizes[:], [8], [128], [0.1]))
