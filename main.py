@@ -3,7 +3,8 @@ import json
 import os.path
 import shutil
 import sys
-print('PAth:', sys.argv[0])
+print('Path:', sys.argv[0])
+print('Python version:', sys.version_info.major, sys.version_info.minor)
 import numpy as np
 import tensorflow as tf
 import experiments

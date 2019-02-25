@@ -246,5 +246,5 @@ def calculate_IDs(rbackground_size, rnum_train_ex, rbatch_size, rlearning_rate):
     return IDs, ID_subs, BG_adds
 
 if __name__ == '__main__':
-    print(calculate_IDs([0, 7, 56], [8, 64, 128, 256], [40], learning_rates[:]))
+    print(calculate_IDs([0], [8], [40], [0.001]))
     # print(calculate_IDs(background_sizes[:], [8], [128], [0.1]))
