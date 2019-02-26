@@ -2,7 +2,7 @@
 #SBATCH -n 2
 #SBATCH --array=34-39,178-183,226-231,274-279
 #SBATCH --job-name=minimal
-#SBATCH --mem=8GB
+#SBATCH --mem=80GB
 #SBATCH --gres=gpu:tesla-k80:1
 #SBATCH -t 2:00:00
 #SBATCH --workdir=./log/
