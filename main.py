@@ -84,6 +84,11 @@ if not skip_background:
         imc = tf.concat([l, im, r], 1)
         t = b = tf.random_uniform([opt.hyper.background_size, opt.hyper.image_size + 2 * opt.hyper.background_size, 1], maxval=255)
         imc = tf.concat([t, imc, b], 0)
+        if opt.hyper.full_size:
+            # imc = tf.image.resize(imc, [140, 140], method=tf.image.ResizeMethod.BILINEAR)	# TODO bilinear is quadratic
+            # imc = tf.image.resize_bilinear(imc, [140, 140])	# TODO bilinear is quadratic
+            imc = tf.squeeze(tf.image.resize_bilinear(tf.expand_dims(imc, axis=0), [140, 140]), axis=0)
+
         if standardization:
             imc = tf.image.per_image_standardization(imc)
         process_ims.append(imc)
@@ -142,8 +147,8 @@ with tf.name_scope('accuracy'):
     accuracy = tf.reduce_mean(correct_prediction)
     tf.summary.scalar('accuracy', accuracy)
 
-tf.summary.image('input', tf.expand_dims(
-            tf.reshape(tf.cast(image, tf.float32), [-1, opt.hyper.image_size + 2 * opt.hyper.background_size, opt.hyper.image_size + 2 * opt.hyper.background_size]), 3))
+# tf.summary.image('input', tf.expand_dims(
+#             tf.reshape(tf.cast(image, tf.float32), [-1, opt.hyper.image_size + 2 * opt.hyper.background_size, opt.hyper.image_size + 2 * opt.hyper.background_size]), 3))
 ################################################################################################
 
 

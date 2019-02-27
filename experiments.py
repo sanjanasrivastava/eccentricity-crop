@@ -100,6 +100,7 @@ class Hyperparameters(object):	# TODO change for MNIST
         # Params specific to this study, set to defaults
         self.background_size = 0
         self.num_train_ex = 2**3
+        self.full_size = False
 
     def set_background_size(self, background_size):
 #         self.image_size += background_size
@@ -175,6 +176,7 @@ initialization = None	# TODO
 # Experiment-specific hyperparameters
 background_sizes = [0] + [int(28 * 2**i) for i in range(-3, 3)]	if not LIMIT_TESTS else [0, 7, 56]	# 7 values
 num_train_exs = [2**i for i in range(3, 12)] + [5000]	# 10 values, last is full training set
+full_sizes = [False, True]	# 2 values
 
 idx = 0
 for num_train_ex in num_train_exs:
@@ -189,28 +191,30 @@ for num_train_ex in num_train_exs:
 
 for name_NN, num_layers_NN, max_epochs_NN in zip(name, num_layers, max_epochs):
 
-    for background_size in background_sizes:
-        for data in opt[:len(num_train_exs)]:
-            for batch_size in batch_sizes:	
-                for learning_rate in learning_rates:
-                    opt += [Experiments(idx, name_NN + '_' + str('backgroundsize') + str(background_size) + '_' + 'numtrainex' + str(data.hyper.num_train_ex))]
-            
-                    opt[-1].hyper.max_num_epochs = max_epochs_NN
-                    opt[-1].hyper.background_size = background_size
-                    opt[-1].hyper.num_train_ex = data.hyper.num_train_ex 
-                    opt[-1].hyper.learning_rate = learning_rate
-                    opt[-1].hyper.batch_size = batch_size
-
-                    opt[-1].dnn.name = name_NN
-                    opt[-1].dnn.set_num_layers(num_layers_NN)
-                    opt[-1].dnn.neuron_multiplier.fill(3)
-            
-                    opt[-1].dataset.reuse_tfrecords(data) # opt[0])
-                    opt[-1].hyper.max_num_epochs = int(max_epochs_NN)
-                    opt[-1].hyper.num_epochs_per_decay = \
-                        int(opt[-1].hyper.num_epochs_per_decay)   
-             
-                    idx += 1
+    for full_size in full_sizes:
+        for background_size in background_sizes:
+            for data in opt[:len(num_train_exs)]:
+                for batch_size in batch_sizes:	
+                    for learning_rate in learning_rates:
+                        opt += [Experiments(idx, name_NN + '_' + str('backgroundsize') + str(background_size) + '_' + 'numtrainex' + str(data.hyper.num_train_ex))]
+                
+                        opt[-1].hyper.max_num_epochs = max_epochs_NN
+                        opt[-1].hyper.background_size = background_size
+                        opt[-1].hyper.num_train_ex = data.hyper.num_train_ex 
+                        opt[-1].hyper.learning_rate = learning_rate
+                        opt[-1].hyper.batch_size = batch_size
+                        opt[-1].hyper.full_size = full_size
+    
+                        opt[-1].dnn.name = name_NN
+                        opt[-1].dnn.set_num_layers(num_layers_NN)
+                        opt[-1].dnn.neuron_multiplier.fill(3)
+                
+                        opt[-1].dataset.reuse_tfrecords(data) # opt[0])
+                        opt[-1].hyper.max_num_epochs = int(max_epochs_NN)
+                        opt[-1].hyper.num_epochs_per_decay = \
+                            int(opt[-1].hyper.num_epochs_per_decay)   
+                 
+                        idx += 1
 
 '''
 EXPERIMENT ID GUIDE
@@ -219,32 +223,49 @@ batch_size=128, all <num_train_ex>, background_sizes=0,7,56:
 
 '''
 
-def calculate_IDs(rbackground_size, rnum_train_ex, rbatch_size, rlearning_rate):
+def calculate_IDs(rfull_size, rbackground_size, rnum_train_ex, rbatch_size, rlearning_rate):
 
-    data_offset = 10 
-
+    FS = len(full_sizes)
     BG = len(background_sizes)
-    NTE = len(num_train_exs)
+    NTE = data_offset = len(num_train_exs)
     BS = len(batch_sizes)
     LR = len(learning_rates)
     
-    IDs, ID_subs, BG_adds = ([] for __ in range(3))
-    for bg, nte, bs, lr in itertools.product(rbackground_size, rnum_train_ex, rbatch_size, rlearning_rate): 
+    IDs, ID_subs, BG_adds, FS_adds = ([] for __ in range(4))
+    for fs, bg, nte, bs, lr in itertools.product(rfull_size, rbackground_size, rnum_train_ex, rbatch_size, rlearning_rate): 
+        i_fs = int(fs)
         i_bg = background_sizes.index(bg)
         i_nte = num_train_exs.index(nte)
         i_bs = batch_sizes.index(bs)
         i_lr = learning_rates.index(lr)
 
-        ID = i_lr + (i_bs * LR) + (i_nte * LR * BS) + (i_bg * LR * BS * NTE) + data_offset
+        ID = i_lr + (i_bs * LR) + (i_nte * LR * BS) + (i_bg * LR * BS * NTE) + (i_fs * BG * NTE * BS * LR) + data_offset
         ID_sub = i_lr + (i_bs * LR) + (i_nte * LR * BS) + data_offset
         BG_add = i_bg * LR * BS * NTE
+        FS_add = i_fs * BG * NTE * BS * LR
 
         IDs.append(ID) 
         ID_subs.append(ID_sub)
         BG_adds.append(BG_add)
+        FS_adds.append(FS_add)
 
-    return IDs, ID_subs, BG_adds
+    return IDs, ID_subs, BG_adds, FS_adds
+
+def _backcalculate_ID(ID):
+    '''
+    INCOMPLETE
+    '''
+
+    FS = len(full_sizes)
+    BG = len(background_sizes)
+    NTE = data_offset = len(num_train_exs)
+    BS = len(batch_sizes)
+    LR = len(learning_rates)
+    
+    ID_unoffset = ID - data_offset
+    return None 
+    
 
 if __name__ == '__main__':
-    print(calculate_IDs([3, 14, 28], [16, 32], [40], learning_rates[:]))
+    print(calculate_IDs([False, True], [3, 14, 28], [16, 32], [40], learning_rates[:]))
     # print(calculate_IDs(background_sizes[:], [8], [128], [0.1]))

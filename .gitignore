@@ -2,4 +2,4 @@
 tools/log/*
 *.swp
 tools/_log/*
-test.pdf
+*.pdf

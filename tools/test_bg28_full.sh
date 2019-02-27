@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH -n 2
-#SBATCH --array=34-39,178-183,226-231,274-279
+#SBATCH --array=34-39,82-87,130-135,178-183,226-231,274-279
 #SBATCH --job-name=minimal
 #SBATCH --mem=4GB
 #SBATCH --gres=gpu:tesla-k80:1
@@ -10,6 +10,4 @@
 
 cd /om2/user/sanjanas/eccentricity-crop
 singularity exec -B /om2:/om2 --nv /om/user/xboix/singularity/xboix-tensorflow.simg \
-python /om2/user/sanjanas/eccentricity-crop/main.py $((${SLURM_ARRAY_TASK_ID} + 0))
-
-
+python /om2/user/sanjanas/eccentricity-crop/main.py $((${SLURM_ARRAY_TASK_ID} + 1920 + 3360))

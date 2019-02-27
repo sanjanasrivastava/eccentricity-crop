@@ -94,6 +94,10 @@ class MNIST(dataset.Dataset):
         t = b = tf.random_uniform([self.opt.hyper.background_size, self.opt.hyper.image_size + 2 * self.opt.hyper.background_size, 1], maxval=255)
         background_image = tf.concat([t, background_image, b], 0)
 
+        if self.opt.hyper.full_size:
+            # background_image = tf.image.resize(background_image, [140, 140], method=tf.image.ResizeMethod.BILINEAR)	# TODO bilinear is quadratic
+            background_image = tf.squeeze(tf.image.resize_bilinear(tf.expand_dims(background_image, axis=0), [140, 140]), axis=0)
+
         if standarization:
             # Subtract off the mean and divide by the variance of the pixels.
             float_image = tf.image.per_image_standardization(background_image)
