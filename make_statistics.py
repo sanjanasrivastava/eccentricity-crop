@@ -36,6 +36,7 @@ def accuracy_v_num_train_ex(full_sizes, background_sizes, num_train_exs, batch_s
     test_accuracies = np.zeros((BG, NTE, LR))
     IDs, __, __, __ = calculate_IDs(full_sizes, background_sizes, num_train_exs, batch_sizes, learning_rates)
     for ID in IDs:
+        print(ID)
         iopt = opt[ID]
         bg = bg_lookup[iopt.hyper.background_size]
         nte = nte_lookup[iopt.hyper.num_train_ex]
@@ -72,10 +73,12 @@ def accuracy_v_num_train_ex(full_sizes, background_sizes, num_train_exs, batch_s
 #             plt.errorbar(x=num_train_exs, y=100*results_per_bg, fmt='-o', color=next(cc))
 
     plt.xticks(num_train_exs, [str(num_train_ex) for num_train_ex in num_train_exs])
-    plt.savefig('./test_full.pdf')
+    plt.savefig('./test' + ('_full' if full_sizes[0] else '') + '.pdf')
+    plt.close()
 
 
 if __name__ == '__main__':
+    res = accuracy_v_num_train_ex([False], [0, 3, 7, 14, 28, 56], [8, 16, 32, 64, 128, 256], [40], exp_learning_rates[:])
     res = accuracy_v_num_train_ex([True], [0, 3, 7, 14, 28, 56], [8, 16, 32, 64, 128, 256], [40], exp_learning_rates[:])
     # res = accuracy_v_num_train_ex([True], [0, 3, 7, 14, 28, 56], [8, 
     # print(res)

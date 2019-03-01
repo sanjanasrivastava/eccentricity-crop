@@ -67,27 +67,30 @@ test_iterator_full = test_dataset_full.make_initializable_iterator()
 # Declare DNN
 ################################################################################################
 
+print('getting data from dataset')
 # Get data from dataset dataset
 images_in, y_ = iterator.get_next()
 images_in.set_shape([opt.hyper.batch_size, opt.hyper.image_size, opt.hyper.image_size, 1])
 # ims = tf.unstack(images_in, num=opt.hyper.batch_size, axis=0)
 ims = tf.unstack(images_in, axis=0)
 
-skip_background = False # TODO toggle False after the mismatched input sizes issue 
+print('making background in main.py')
+max_input_size = 140
+make_background = True
 standardization = True	# TODO toggle based on what's best 
-if not skip_background:
+if make_background:
     process_ims = []
     # Prepare images by adding correct-sized random background to each 
     for im in ims:	# Get each individual image 
-        # imc = im * 255 / tf.reduce_max(im)
-        l = r = tf.random_uniform([opt.hyper.image_size, opt.hyper.background_size, 1], maxval=255)
+        background_size = tf.random.uniform([1], maxval=max_input_size-opt.hyper.image_size, dtype=tf.int32) if opt.hyper.background_size == 'random' else opt.hyper.background_size
+        l = tf.random_uniform([opt.hyper.image_size, background_size, 1], maxval=255)
+        r = tf.random_uniform([opt.hyper.image_size, background_size, 1], maxval=255)
         imc = tf.concat([l, im, r], 1)
-        t = b = tf.random_uniform([opt.hyper.background_size, opt.hyper.image_size + 2 * opt.hyper.background_size, 1], maxval=255)
+        t = tf.random_uniform([background_size, opt.hyper.image_size + 2 * background_size, 1], maxval=255)
+        b = tf.random_uniform([background_size, opt.hyper.image_size + 2 * background_size, 1], maxval=255)
         imc = tf.concat([t, imc, b], 0)
         if opt.hyper.full_size:
-            # imc = tf.image.resize(imc, [140, 140], method=tf.image.ResizeMethod.BILINEAR)	# TODO bilinear is quadratic
-            # imc = tf.image.resize_bilinear(imc, [140, 140])	# TODO bilinear is quadratic
-            imc = tf.squeeze(tf.image.resize_bilinear(tf.expand_dims(imc, axis=0), [140, 140]), axis=0)
+            imc = tf.squeeze(tf.image.resize_bilinear(tf.expand_dims(imc, axis=0), [max_input_size, max_input_size]), axis=0)
 
         if standardization:
             imc = tf.image.per_image_standardization(imc)
@@ -95,9 +98,10 @@ if not skip_background:
 else:
     process_ims = [tf.image.per_image_standardization(im) if standardization else im for im in ims]
 
-tf.summary.scalar('im max', tf.reduce_max(imc))
-tf.summary.scalar('im min', tf.reduce_min(imc))
+# tf.summary.scalar('im max', tf.reduce_max(imc))
+# tf.summary.scalar('im min', tf.reduce_min(imc))
 image = tf.stack(process_ims)
+print('IMAGE SHAPE:', image.get_shape())
 
 # Call DNN
 dropout_rate = tf.placeholder(tf.float32)

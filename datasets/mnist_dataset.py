@@ -70,6 +70,7 @@ class MNIST(dataset.Dataset):
         return test_addrs, test_labels
 
     def preprocess_image(self, augmentation, standarization, image):
+#         return image	# TODO trying to break
         if augmentation:
             # Randomly crop a [height, width] section of the image.
             #distorted_image = tf.random_crop(image, [self.opt.hyper.crop_size, self.opt.hyper.crop_size, 3])
@@ -89,21 +90,24 @@ class MNIST(dataset.Dataset):
         else:
             distorted_image = image
 
-        l = r = tf.random_uniform([self.opt.hyper.image_size, self.opt.hyper.background_size, 1], maxval=255)
-        background_image = tf.concat([l, distorted_image, r], 1)
-        t = b = tf.random_uniform([self.opt.hyper.background_size, self.opt.hyper.image_size + 2 * self.opt.hyper.background_size, 1], maxval=255)
-        background_image = tf.concat([t, background_image, b], 0)
-
-        if self.opt.hyper.full_size:
-            # background_image = tf.image.resize(background_image, [140, 140], method=tf.image.ResizeMethod.BILINEAR)	# TODO bilinear is quadratic
-            background_image = tf.squeeze(tf.image.resize_bilinear(tf.expand_dims(background_image, axis=0), [140, 140]), axis=0)
+#         l = r = tf.random_uniform([self.opt.hyper.image_size, self.opt.hyper.background_size, 1], maxval=255)
+#         background_image = tf.concat([l, distorted_image, r], 1)
+#         t = b = tf.random_uniform([self.opt.hyper.background_size, self.opt.hyper.image_size + 2 * self.opt.hyper.background_size, 1], maxval=255)
+#         background_image = tf.concat([t, background_image, b], 0)
+# 
+#         if self.opt.hyper.full_size:
+#             # background_image = tf.image.resize(background_image, [140, 140], method=tf.image.ResizeMethod.BILINEAR)	# TODO bilinear is quadratic
+#             background_image = tf.squeeze(tf.image.resize_bilinear(tf.expand_dims(background_image, axis=0), [140, 140]), axis=0)
+        background_image = distorted_image
 
         if standarization:
             # Subtract off the mean and divide by the variance of the pixels.
             float_image = tf.image.per_image_standardization(background_image)
             float_image.set_shape([self.opt.hyper.image_size, self.opt.hyper.image_size, 3])
         else:
-            float_image = distorted_image
+            float_image = background_image 
+
+        print('shape from preprocess:', float_image.shape)
 
         return float_image
 
