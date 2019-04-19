@@ -70,7 +70,7 @@ images_in.set_shape([opt.hyper.batch_size, opt.hyper.image_size, opt.hyper.image
 ims = tf.unstack(images_in, num=opt.hyper.batch_size, axis=0)
 
 skip_background = False # TODO toggle False after the mismatched input sizes issue 
-standardization = False	# TODO toggle based on what's best 
+standardization = True	# TODO toggle based on what's best 
 if not skip_background:
     process_ims = []
     # Prepare images by adding correct-sized random background to each 

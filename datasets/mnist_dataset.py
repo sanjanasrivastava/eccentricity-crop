@@ -33,6 +33,7 @@ class MNIST(dataset.Dataset):
 
     # Virtual functions:
     def get_data_trainval(self):
+        print('NUM IMAGES TRAIN:', self.num_images_epoch)
         print('NUM IMAGES VAL:', self.num_images_val)
         mnist_data = mnist.read_data_sets('../eccentricity-data/mnist', reshape=False, validation_size=int(self.num_images_val))	# 95% train, 5% validation as was used for cifar
 
@@ -41,11 +42,16 @@ class MNIST(dataset.Dataset):
         val_addrs = list(mnist_data.validation.images)
         val_labels = list(mnist_data.validation.labels)
 
-        print('IN GET_DATA_TRAINVAL')
-        print('TRAIN MIN:', train_addrs[0].min())
-        print('TRAIN MAX:', train_addrs[0].max())
-        print('TRAIN ELEMENT TYPE:', type(train_addrs[0][0][0][0]))
-        print('LEAVING GET_DATA_TRAINVAL') 
+        print(len(train_labels))
+        print(mnist_data.train.labels)
+
+        print('LABEL SHAPE:', train_labels[0].shape) 
+        labels = np.argmax(train_labels, axis=1)
+        print('0th:', labels[0])
+        print('1000th:', labels[999])
+        print('5001st:', labels[5000])
+        crash
+
         return train_addrs, train_labels, val_addrs, val_labels
 
     def get_data_test(self):
@@ -81,13 +87,6 @@ class MNIST(dataset.Dataset):
         t = b = tf.random_uniform([self.opt.hyper.background_size, self.opt.hyper.image_size + 2 * self.opt.hyper.background_size, 1], maxval=255)
         background_image = tf.concat([t, background_image, b], 0)
 
-#         with tf.Session() as sess:
-#             ns = [m.eval(session=sess) for m in [l, r, t, b]]
-#             print([np.max(n) for n in ns])
-#             print([np.min(n) for n in ns])
-#             img = image.eval(session=sess)
-#             print(np.min(img), np.max(img))
-            
         if standarization:
             # Subtract off the mean and divide by the variance of the pixels.
             float_image = tf.image.per_image_standardization(background_image)

@@ -1,4 +1,5 @@
 import numpy as np
+LIMIT_TESTS = False	# Toggle based on whether we want to run exhaustive experiments or a subset 
 
 
 class Dataset(object):
@@ -160,23 +161,17 @@ class Experiments(object):
 opt = []
 plot_freezing = []
 
-# neuron_multiplier = [0.25, 0.5, 1, 2, 4]
-# crop_sizes = [28, 24, 20, 16, 12]
-# training_data = [1]
-
+# General hyperparameters
 name = ["Alexnet"]
 num_layers = [5]
 max_epochs = [100]
-background_sizes = [0] + [int(28 * 2**i) for i in range(-3, 3)]	# total of 7 
-num_train_exs = [2**i for i in range(3, 11)]	# total of 8 experiments
+learning_rates = [10**i for i in range(-6, -1)]
+batch_sizes = [2**i for i in range(7)] if not LIMIT_TESTS else [16]		# TODO adjust for experiments with total training examples smaller than the batch size (do I have to? Will it just do one incomplete batch? Even if so, is that a waste of resources?)
+initialization = None	# TODO 
 
-
-# idx = 0
-# # Create base for TF records:
-# opt += [Experiments(idx, "data")]
-# opt[-1].hyper.max_num_epochs = 0
-# idx += 1
-
+# Experiment-specific hyperparameters
+background_sizes = [0] + [int(28 * 2**i) for i in range(-3, 3)]	if not LIMIT_TESTS else [0, 7, 56]	# total of 7 
+num_train_exs = [2**i for i in range(3, 11)] if not LIMIT_TESTS else [5000]	# total of 8 experiments
 
 idx = 0
 for num_train_ex in num_train_exs:
@@ -197,20 +192,27 @@ for name_NN, num_layers_NN, max_epochs_NN in zip(name, num_layers, max_epochs):
     for background_size in background_sizes:
         # for data in opt[:len(num_train_exs)]:	# get tf records for each num_train_ex
         i += 1
-        for data in opt[:len(num_train_exs)]:	# just the 64-image, smallest-background-size-trained model
-            opt += [Experiments(idx, name_NN + '_' + str('backgroundsize') + str(background_size) + '_' + 'numtrainex' + str(data.hyper.num_train_ex))]
-    
-            opt[-1].hyper.max_num_epochs = max_epochs_NN
-            opt[-1].hyper.background_size = background_size
-            opt[-1].hyper.num_train_ex = data.hyper.num_train_ex 
-            opt[-1].dnn.name = name_NN
-            opt[-1].dnn.set_num_layers(num_layers_NN)
-            opt[-1].dnn.neuron_multiplier.fill(3)
-    
-            opt[-1].dataset.reuse_tfrecords(data) # opt[0])
-            opt[-1].hyper.max_num_epochs = int(max_epochs_NN)
-            opt[-1].hyper.num_epochs_per_decay = \
-                int(opt[-1].hyper.num_epochs_per_decay)   
-     
-            idx += 1
+        for data in opt[:len(num_train_exs)]:
+
+            for learning_rate in learning_rates:
+                for batch_size in batch_sizes:	
+                    opt += [Experiments(idx, name_NN + '_' + str('backgroundsize') + str(background_size) + '_' + 'numtrainex' + str(data.hyper.num_train_ex))]
+            
+                    opt[-1].hyper.max_num_epochs = max_epochs_NN
+                    opt[-1].hyper.background_size = background_size
+                    opt[-1].hyper.num_train_ex = data.hyper.num_train_ex 
+                    opt[-1].hyper.learning_rate = learning_rate
+                    opt[-1].hyper.batch_size = batch_size
+
+                    opt[-1].dnn.name = name_NN
+                    opt[-1].dnn.set_num_layers(num_layers_NN)
+                    opt[-1].dnn.neuron_multiplier.fill(3)
+            
+                    opt[-1].dataset.reuse_tfrecords(data) # opt[0])
+                    opt[-1].hyper.max_num_epochs = int(max_epochs_NN)
+                    opt[-1].hyper.num_epochs_per_decay = \
+                        int(opt[-1].hyper.num_epochs_per_decay)   
+             
+                    idx += 1
+
 

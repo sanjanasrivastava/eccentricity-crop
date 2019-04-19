@@ -1,7 +1,8 @@
-import tensorflow as tf
-import sys
+import numpy as np
 import os.path
 import shutil
+import sys
+import tensorflow as tf
 
 from abc import ABCMeta, abstractmethod
 
@@ -90,9 +91,12 @@ class Dataset:
         print(self.opt.dataset.dataset_path)
 
         train_addrs, train_labels, val_addrs, val_labels = self.get_data_trainval()
+        train_addrs = [(train_addr * 255).astype(np.int32) for train_addr in train_addrs]
+        val_addrs = [(val_addr * 255).astype(np.int32) for val_addr in val_addrs]
         print('IN CREATE_TFRECORDS')
         print('TRAIN MIN:', train_addrs[0].min())
         print('TRAIN MAX:', train_addrs[0].max())
+        print('TRAIN TYPE:', type(train_addrs[0][0][0][0]))
         print('LEAVING CREATE_TFRECORDS')
 
         app = self.opt.dataset.transfer_append_name
@@ -100,6 +104,7 @@ class Dataset:
         self.write_tfrecords(tfrecords_path, 'val' + app, val_addrs, val_labels)
 
         test_addrs, test_labels = self.get_data_test()
+        test_addrs = [(test_addr * 255).astype(np.int32) for test_addr in test_addrs]
 
         self.write_tfrecords(tfrecords_path, 'test' + app, test_addrs, test_labels)
 
@@ -119,7 +124,7 @@ class Dataset:
                         set_name_app + '/height': tf.FixedLenFeature([], tf.int64),
                         set_name_app + '/width': tf.FixedLenFeature([], tf.int64)}
             parsed_features = tf.parse_single_example(example_proto, features)
-            image = tf.decode_raw(parsed_features[set_name_app + '/image'], tf.int32)
+            image = tf.decode_raw(parsed_features[set_name_app + '/image'], tf.int32)	# TODO find correct type (two lines down in S definition as well)
             image = tf.cast(image,tf.float32)
             S = tf.stack([tf.cast(parsed_features[set_name_app + '/height'], tf.int32),
                           tf.cast(parsed_features[set_name_app + '/width'], tf.int32), 1])
