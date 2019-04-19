@@ -1,3 +1,4 @@
+import itertools
 import numpy as np
 LIMIT_TESTS = False	# Toggle based on whether we want to run exhaustive experiments or a subset 
 
@@ -75,6 +76,7 @@ class DNN(object):	# TODO change for MNIST
         self.layers = 4
         self.stride = 2
         self.neuron_multiplier = np.ones([self.layers])
+        self.num_input_channels = 1
 
     def set_num_layers(self, num_layers):
         self.layers = num_layers
@@ -99,6 +101,8 @@ class Hyperparameters(object):	# TODO change for MNIST
         # Params specific to this study, set to defaults
         self.background_size = 0
         self.num_train_ex = 2**3
+        self.full_size = False
+        self.inverted_pyramid = False
 
     def set_background_size(self, background_size):
 #         self.image_size += background_size
@@ -109,7 +113,8 @@ class Experiments(object):
 
     def __init__(self, id, name):
         self.name = "base"
-        self.log_dir_base = '/om/user/sanjanas/eccentricity-data/models/' 
+        self.log_dir_base = '/om2/user/sanjanas/eccentricity-data/models/'
+            # '/om/user/sanjanas/eccentricity-data/models/' 
             #"/om/user/xboix/share/minimal-pooling/models/"
             #"/Users/xboix/src/minimal-cifar/log/"
             #"/om/user/xboix/src/robustness/robustness/log/"
@@ -162,25 +167,25 @@ opt = []
 plot_freezing = []
 
 # General hyperparameters
-name = ["Alexnet"]
-num_layers = [5]
-max_epochs = [100]
-learning_rates = [10**i for i in range(-6, -1)]
-batch_sizes = [2**i for i in range(7)] if not LIMIT_TESTS else [16]		# TODO adjust for experiments with total training examples smaller than the batch size (do I have to? Will it just do one incomplete batch? Even if so, is that a waste of resources?)
+name = ['mnist_cnn']	# ["Alexnet"]
+num_layers = [3]	# [5]
+max_epochs = [20]	# [100]
+learning_rates = [10**i for i in range(-6, 0)]	# 6 values
+# batch_sizes = [2**i for i in range(8)] if not LIMIT_TESTS else [128]	# 8 values
+batch_sizes = [1, 4, 10, 20, 40, 80, 160, 320] if not LIMIT_TESTS else [40]
 initialization = None	# TODO 
 
 # Experiment-specific hyperparameters
-background_sizes = [0] + [int(28 * 2**i) for i in range(-3, 3)]	if not LIMIT_TESTS else [0, 7, 56]	# total of 7 
-num_train_exs = [2**i for i in range(3, 11)] if not LIMIT_TESTS else [5000]	# total of 8 experiments
+background_sizes = [0] + [int(28 * 2**i) for i in range(-3, 3)]	if not LIMIT_TESTS else [0, 7, 56]	# 7 values
+num_train_exs = [2**i for i in range(3, 12)] + [5000]	# 10 values, last is full training set
+full_sizes = [False, True]	# 2 values
 
 idx = 0
 for num_train_ex in num_train_exs:
-    # for background_size in background_sizes:
     data = Experiments(idx, 'numtrainex' + str(num_train_ex)) 
-    data.dataset.set_num_train_ex(num_train_ex)
-#     data.hyper.set_background_size(background_size)
+#     data.dataset.set_num_train_ex(num_train_ex)
     opt.append(data)
-    opt[-1].hyper.max_num_epochs = 2	# TODO change to max_epochs[0]
+    opt[-1].hyper.max_num_epochs = 0
     opt[-1].hyper.num_train_ex = num_train_ex
 
     idx += 1
@@ -188,31 +193,143 @@ for num_train_ex in num_train_exs:
 
 for name_NN, num_layers_NN, max_epochs_NN in zip(name, num_layers, max_epochs):
 
-    i = 0
-    for background_size in background_sizes:
-        # for data in opt[:len(num_train_exs)]:	# get tf records for each num_train_ex
-        i += 1
-        for data in opt[:len(num_train_exs)]:
-
-            for learning_rate in learning_rates:
+    for full_size in full_sizes:
+        for background_size in background_sizes:
+            for data in opt[:len(num_train_exs)]:
                 for batch_size in batch_sizes:	
-                    opt += [Experiments(idx, name_NN + '_' + str('backgroundsize') + str(background_size) + '_' + 'numtrainex' + str(data.hyper.num_train_ex))]
-            
-                    opt[-1].hyper.max_num_epochs = max_epochs_NN
-                    opt[-1].hyper.background_size = background_size
-                    opt[-1].hyper.num_train_ex = data.hyper.num_train_ex 
-                    opt[-1].hyper.learning_rate = learning_rate
-                    opt[-1].hyper.batch_size = batch_size
+                    for learning_rate in learning_rates:
+                        opt += [Experiments(idx, name_NN + '_' + str('backgroundsize') + str(background_size) + '_' + 'numtrainex' + str(data.hyper.num_train_ex))]
+                
+                        opt[-1].hyper.max_num_epochs = max_epochs_NN
+                        opt[-1].hyper.background_size = background_size
+                        opt[-1].hyper.num_train_ex = data.hyper.num_train_ex 
+                        opt[-1].hyper.learning_rate = learning_rate
+                        opt[-1].hyper.batch_size = batch_size
+                        opt[-1].hyper.full_size = full_size
+    
+                        opt[-1].dnn.name = name_NN
+                        opt[-1].dnn.set_num_layers(num_layers_NN)
+                        opt[-1].dnn.neuron_multiplier.fill(3)
+                
+                        opt[-1].dataset.reuse_tfrecords(data) # opt[0])
+                        opt[-1].hyper.max_num_epochs = int(max_epochs_NN)
+                        opt[-1].hyper.num_epochs_per_decay = \
+                            int(opt[-1].hyper.num_epochs_per_decay)   
+                 
+                        idx += 1
 
-                    opt[-1].dnn.name = name_NN
-                    opt[-1].dnn.set_num_layers(num_layers_NN)
-                    opt[-1].dnn.neuron_multiplier.fill(3)
-            
-                    opt[-1].dataset.reuse_tfrecords(data) # opt[0])
-                    opt[-1].hyper.max_num_epochs = int(max_epochs_NN)
-                    opt[-1].hyper.num_epochs_per_decay = \
-                        int(opt[-1].hyper.num_epochs_per_decay)   
-             
-                    idx += 1
+    # Random background, resized to max_input_size
+    for data in opt[:len(num_train_exs)]:
+        for batch_size in batch_sizes:
+            for learning_rate in learning_rates:
+                exp = Experiments(idx, name_NN + '_' + 'random_background_' + 'numtrainex' + str(data.hyper.num_train_ex))
+                exp.hyper.background_size = 'random' 
+                exp.hyper.num_train_ex = data.hyper.num_train_ex
+                exp.hyper.learning_rate = learning_rate
+                exp.hyper.batch_size = batch_size
+                exp.hyper.full_size = True	# so that it always gets resized up 
 
+                exp.dnn.name = name_NN
+                exp.dnn.set_num_layers(num_layers_NN)
+                exp.dnn.neuron_multiplier.fill(3)
+
+                exp.dataset.reuse_tfrecords(data)
+                exp.hyper.max_num_epochs = int(max_epochs_NN)
+                exp.dataset.max_num_epochs = int(max_epochs_NN)
+                exp.hyper.num_epochs_per_decay = int(exp.hyper.num_epochs_per_decay)
+                opt.append(exp)
+
+                idx += 1
+
+    # Inverted pyramid
+    for data in opt[:len(num_train_exs)]:
+        for batch_size in batch_sizes:
+            for learning_rate in learning_rates:
+                exp = Experiments(idx, name_NN + '_' + 'inverted_pyramid_' + 'numtrainex' + str(data.hyper.num_train_ex))
+                exp.hyper.background_size = 'inverted_pyramid' 
+                exp.hyper.num_train_ex = data.hyper.num_train_ex
+                exp.hyper.learning_rate = learning_rate
+                exp.hyper.batch_size = batch_size
+                exp.hyper.full_size = True	# so that it always gets resized up 
+
+                exp.dnn.name = name_NN
+                exp.dnn.set_num_layers(num_layers_NN)
+                exp.dnn.neuron_multiplier.fill(3)
+                exp.dnn.num_input_channels = 5
+
+                exp.dataset.reuse_tfrecords(data)
+                exp.hyper.max_num_epochs = int(max_epochs_NN)
+                exp.dataset.max_num_epochs = int(max_epochs_NN)
+                exp.hyper.num_epochs_per_decay = int(exp.hyper.num_epochs_per_decay)
+                opt.append(exp)
+
+                idx += 1
+
+    # Random background, resized to image_size 
+    for data in opt[:len(num_train_exs)]:
+        for batch_size in batch_sizes:
+            for learning_rate in learning_rates:
+                exp = Experiments(idx, name_NN + '_' + 'random_background_small_' + 'numtrainex' + str(data.hyper.num_train_ex))
+                exp.hyper.background_size = 'random_small' 
+                exp.hyper.num_train_ex = data.hyper.num_train_ex
+                exp.hyper.learning_rate = learning_rate
+                exp.hyper.batch_size = batch_size
+                exp.hyper.full_size = True	# so that it always gets resized up 
+
+                exp.dnn.name = name_NN
+                exp.dnn.set_num_layers(num_layers_NN)
+                exp.dnn.neuron_multiplier.fill(3)
+
+                exp.dataset.reuse_tfrecords(data)
+                exp.hyper.max_num_epochs = int(max_epochs_NN)
+                exp.dataset.max_num_epochs = int(max_epochs_NN)
+                exp.hyper.num_epochs_per_decay = int(exp.hyper.num_epochs_per_decay)
+                opt.append(exp)
+
+                idx += 1
+
+
+def calculate_IDs(rfull_size, rbackground_size, rnum_train_ex, rbatch_size, rlearning_rate):
+
+    FS = len(full_sizes)
+    BG = len(background_sizes)
+    NTE = data_offset = len(num_train_exs)
+    BS = len(batch_sizes)
+    LR = len(learning_rates)
+    random_bg_offset = FS * BG * NTE * BS * LR 
+    inverted_pyramid_offset = random_small_offset = NTE * BS * LR
+    
+    IDs, ID_subs = ([] for __ in range(2))
+
+    for fs, bg, nte, bs, lr in itertools.product(rfull_size, rbackground_size, rnum_train_ex, rbatch_size, rlearning_rate): 
+        i_nte = num_train_exs.index(nte)
+        i_bs = batch_sizes.index(bs)
+        i_lr = learning_rates.index(lr)
+        ID = i_lr + (i_bs * LR) + (i_nte * LR * BS) + data_offset
+        ID_subs.append(ID)
+
+        if type(bg) == int:	# TODO change if another int-labeled background_size gets tacked on for another experiment
+            i_fs = int(fs)
+            i_bg = background_sizes.index(bg)
+            BG_add = i_bg * LR * BS * NTE
+            FS_add = i_fs * BG * NTE * BS * LR
+            ID += BG_add + FS_add
+
+        else:
+            ID += random_bg_offset
+            if bg != 'random':
+                ID += inverted_pyramid_offset
+                if bg != 'inverted_pyramid':
+                    ID += random_small_offset     
+
+        IDs.append(ID)
+
+    return IDs, ID_subs
+
+
+if __name__ == '__main__':
+    # print(calculate_IDs([False, True], [3, 14, 28], [16, 32], [40], learning_rates[:]))
+    # print(calculate_IDs(background_sizes[:], [8], [128], [0.1]))
+    # print(calculate_randombg_IDs(num_train_exs[:], [40], learning_rates[:]))
+    print(calculate_IDs([True], [56], [8, 16, 32, 64, 128, 256], [40], learning_rates[:]))
 
