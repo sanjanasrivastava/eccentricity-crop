@@ -149,7 +149,7 @@ class Dataset:
 
         if repeat:
             dataset = dataset.repeat()  # Repeat the input indefinitely.
-
+        print('BATCH TYPE:', type(self.opt.hyper.batch_size), 'BATCH SIZE:', self.opt.hyper.batch_size)
         return dataset.batch(self.opt.hyper.batch_size)
 
 

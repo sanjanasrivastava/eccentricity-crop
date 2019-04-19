@@ -25,14 +25,13 @@ def mnist_cnn(x, opt, labels_id, dropout_rate):
     # conv1
     with tf.variable_scope('conv1', reuse=reuse) as scope:
         # kernel = tf.get_variable(initializer=tf.random_normal([5, 5, 1, num_neurons[0]]), name='weights')
-        kernel = tf.get_variable('weights', shape=[5, 5, 1, num_neurons[0]], initializer=xavier_initializer())
+        kernel = tf.get_variable('weights', shape=[5, 5, opt.dnn.num_input_channels, num_neurons[0]], initializer=xavier_initializer())
         conv = tf.nn.conv2d(x, kernel, [1, 1, 1, 1], padding='SAME')
         # biases = tf.get_variable(initializer=tf.random_normal([num_neurons[0]]), name='biases')
         biases = tf.get_variable('biases', shape=[num_neurons[0]], initializer=xavier_initializer())
         pre_activation = tf.nn.bias_add(conv, biases)
         conv1 = tf.nn.relu(pre_activation, name=scope.name)
 
-        print('conv 1 shape:', conv1.shape)
         summ.variable_summaries(kernel, biases, opt)
         summ.activation_summaries(conv1, opt)
         activations += [conv1]
@@ -52,7 +51,6 @@ def mnist_cnn(x, opt, labels_id, dropout_rate):
         pre_activation = tf.nn.bias_add(conv, biases)
         conv2 = tf.nn.relu(pre_activation, name=scope.name)
 
-        print('conv 2 shape:', conv2.shape)
         summ.variable_summaries(kernel, biases, opt)
         summ.activation_summaries(conv2, opt)
         activations += [conv2]
@@ -71,7 +69,6 @@ def mnist_cnn(x, opt, labels_id, dropout_rate):
         fc_ = tf.nn.relu(tf.matmul(pool_vec, weights) + biases, name=scope.name)
         fc3 = tf.nn.dropout(fc_, dropout_rate)
 
-        print(np.prod(fc3.shape))
         activations += [fc3]
         parameters += [weights]
         summ.variable_summaries(weights, biases, opt)
