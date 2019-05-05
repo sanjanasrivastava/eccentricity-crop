@@ -21,10 +21,12 @@ def mnist_cnn(x, opt, labels_id, dropout_rate):
     stride = opt.dnn.stride
     parameters = []
     activations = []
+    inputs = []
 
     # conv1
     with tf.variable_scope('conv1', reuse=reuse) as scope:
         # kernel = tf.get_variable(initializer=tf.random_normal([5, 5, 1, num_neurons[0]]), name='weights')
+        inputs.append(x)
         kernel = tf.get_variable('weights', shape=[5, 5, opt.dnn.num_input_channels, num_neurons[0]], initializer=xavier_initializer())
         conv = tf.nn.conv2d(x, kernel, [1, 1, 1, 1], padding='SAME')
         # biases = tf.get_variable(initializer=tf.random_normal([num_neurons[0]]), name='biases')
@@ -82,10 +84,11 @@ def mnist_cnn(x, opt, labels_id, dropout_rate):
         output = tf.add(tf.matmul(fc3, weights), biases, name=scope.name)
 
         activations += [output]
+        parameters += [weights]
         summ.variable_summaries(weights, biases, opt)
         summ.activation_summaries(fc3, opt)
 
-    return output, parameters, activations
+    return output, parameters, activations, inputs
         
 
 

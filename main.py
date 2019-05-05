@@ -19,14 +19,14 @@ from util import summary
 ################################################################################################
 
 ID = int(sys.argv[1:][0])
+print(len(experiments.opt))
 opt = experiments.opt[ID]
 
-print('ID:', ID)
-print('Num training examples:', opt.hyper.num_train_ex)
-print('Background size:', opt.hyper.background_size)
+
+train_background_size = test_background_size = None
 
 # Check if making model or getting activations
-if len(sys.argv) > 2 and sys.argv[2] == 'activations': 
+if len(sys.argv) > 2 and (sys.argv[2] == 'activations' or sys.argv[2] == 'changed_condition_activations'): 
     opt.test = True
     with open(opt.log_dir_base + 'optimal_models.pickle', 'rb') as ofile:
         optimal_models = pickle.load(ofile)
@@ -40,8 +40,20 @@ if len(sys.argv) > 2 and sys.argv[2] == 'activations':
     except KeyError:
         print('Ideal learning rate has not been established, exiting script.')
         sys.exit()
+
+    if sys.argv[2] == 'changed_condition_activations':
+        train_background_size = opt.hyper.background_size
+        test_background_size = 56		# TODO hardcoded; change as needed
+
 else:
     make_activations = False
+
+# Check if comparing in different conditions
+if len(sys.argv) > 2 and sys.argv[2] == 'comparison_test':
+    opt.test = True
+
+if opt.dnn.num_input_channels == 5:
+    train_background_size = 'inverted_pyramid'          # so that fixed-background image will be made pyramidal
 
 
 # Skip execution if instructed in experiment
@@ -50,6 +62,10 @@ if opt.skip:
     quit()
 
 print(opt.name)
+print('ID:', ID)
+print('Num training examples:', opt.hyper.num_train_ex)
+print('Background size:', opt.hyper.background_size)
+print('Log directory:', opt.log_dir_base)
 ################################################################################################
 
 
@@ -97,12 +113,25 @@ max_input_size = 140
 make_background = True
 standardization = True	# TODO toggle based on what's best 
 if make_background:
+
+    # If making changed_condition_activations, go to test_background_size to make appropriate test images
+    if make_activations and sys.argv[2] == 'changed_condition_activations':
+        opt.hyper.background_size = test_background_size
+  
+    # Transform each individual image 
     process_ims = []
-    for im in ims:	# Get each individual image 
+    for im in ims:	
         imc = im
  
         # Either generate a random background_size that will, at most, fill up the image; or put the defined background_size into a constant tensor
-        background_size = tf.random_uniform([1], maxval=(max_input_size-opt.hyper.image_size)//2, dtype=tf.int32) if opt.hyper.background_size in ['random', 'inverted_pyramid', 'random_small'] else tf.constant([opt.hyper.background_size])
+        # background_size = tf.random_uniform([1], maxval=(max_input_size-opt.hyper.image_size)//2, dtype=tf.int32) if opt.hyper.background_size in ['random', 'inverted_pyramid', 'random_small'] else tf.constant([opt.hyper.background_size])
+
+        if opt.hyper.background_size in ['random', 'inverted_pyramid', 'random_small']:
+            background_size = tf.random_uniform([1], maxval=(max_input_size - opt.hyper.image_size) // 2, dtype=tf.int32)
+        elif opt.hyper.background_size == 'different_conditions':
+            background_size = tf.constant([14])
+        else:
+            background_size = tf.constant([opt.hyper.background_size])
 
         # If background_size is randomly generated, resize input image so that when concatenated with background matrices, it will fill up the max_input_size. This is happening before background addition so background pixels are truly not random and not products of interpolation.
         if opt.hyper.background_size == 'random' or opt.hyper.background_size == 'random_small':
@@ -111,14 +140,16 @@ if make_background:
         else:
             image_size = tf.constant([opt.hyper.image_size])
 
-        # Make random background matrices and add them to the existing image.
-    
-        l = tf.random_uniform(tf.concat([image_size, background_size, tf.constant([1])], axis=0), maxval=255)
-        r = tf.random_uniform(tf.concat([image_size, background_size, tf.constant([1])], axis=0), maxval=255)
-        imc = tf.concat([l, imc, r], 1)
-        t = tf.random_uniform(tf.concat([background_size, (background_size * 2) + image_size, tf.constant([1])], axis=0), maxval=255)
-        b = tf.random_uniform(tf.concat([background_size, (background_size * 2) + image_size, tf.constant([1])], axis=0), maxval=255)
-        imc = tf.concat([t, imc, b], 0)
+        # Make random background matrices and add them to the existing image. If training different_conditions comparison experiment, pad with zeros instead.
+        if opt.hyper.background_size == 'different_conditions' and not opt.test:
+            imc = tf.pad(imc, tf.constant([[14, 14], [14, 14], [0, 0]]))
+        else:
+            l = tf.random_uniform(tf.concat([image_size, background_size, tf.constant([1])], axis=0), maxval=255)
+            r = tf.random_uniform(tf.concat([image_size, background_size, tf.constant([1])], axis=0), maxval=255)
+            imc = tf.concat([l, imc, r], 1)
+            t = tf.random_uniform(tf.concat([background_size, (background_size * 2) + image_size, tf.constant([1])], axis=0), maxval=255)
+            b = tf.random_uniform(tf.concat([background_size, (background_size * 2) + image_size, tf.constant([1])], axis=0), maxval=255)
+            imc = tf.concat([t, imc, b], 0)
 
         # If random-background image is meant to be original image_size, resize it down.
         if opt.hyper.background_size == 'random_small':
@@ -128,12 +159,21 @@ if make_background:
         if type(opt.hyper.background_size) == int and opt.hyper.full_size:
             imc = tf.squeeze(tf.image.resize_bilinear(tf.expand_dims(imc, axis=0), [max_input_size, max_input_size]), axis=0)
 
-        # If we are taking an inverted pyramid approach, make the inverted pyramid
-        if opt.hyper.background_size == 'inverted_pyramid':
+        # If we are taking an inverted pyramid approach, make the inverted pyramid. 
+        # NOTE: also used for testing inverted_pyramid-trained models on any input. 
+        if opt.hyper.background_size == 'inverted_pyramid' or train_background_size == 'inverted_pyramid':
             boxes = [[0, 0, 1, 1], [0.1, 0.1, 0.9, 0.9], [0.2, 0.2, 0.8, 0.8], [0.3, 0.3, 0.7, 0.7], [0.4, 0.4, 0.6, 0.6]]
             imc = tf.image.crop_and_resize(tf.expand_dims(imc, axis=0), boxes, [0 for __ in range(len(boxes))], [opt.hyper.image_size, opt.hyper.image_size], method='bilinear')
             imc = tf.transpose(imc, perm=[3, 1, 2, 0])
             imc = tf.squeeze(imc, axis=0)
+
+        # NOTE: NOT A TRAINING CHANGE. If we are making changed_condition_activations for inverted_pyramid, resize the image down and concat it 5 times.
+        if False:
+        # if sys.argv[2] == 'changed_condition_activations' and train_background_size == 'inverted_pyramid':
+            print('BEFORE RESIZE:', imc.get_shape())
+            imc = tf.squeeze(tf.image.resize_bilinear(tf.expand_dims(imc, axis=0), [opt.hyper.image_size, opt.hyper.image_size]), axis=0)
+            print('AFTER RESIZE:', imc.get_shape())
+            imc = tf.concat([imc for __ in range(5)], axis=2)
 
         # Now that all that's over, standardize.
         if standardization:
@@ -143,11 +183,17 @@ if make_background:
 else:
     process_ims = [tf.image.per_image_standardization(im) if standardization else im for im in ims]
 
+# If making changed_condition_activations, go back to original background_size to ensure correct set_shape code
+if make_activations and sys.argv[2] == 'changed_condition_activations':
+    opt.hyper.background_size = train_background_size
+
 image = tf.stack(process_ims)
-if opt.hyper.background_size == 'inverted_pyramid' or opt.hyper.background_size == 'random_small':
+if opt.hyper.background_size == 'inverted_pyramid' or opt.hyper.background_size == 'random_small' or train_background_size == 'inverted_pyramid':
     image.set_shape([opt.hyper.batch_size, opt.hyper.image_size, opt.hyper.image_size, opt.dnn.num_input_channels])
 elif opt.hyper.full_size:		# this covers all cases where opt.hyper.background_size == 'random'
     image.set_shape([opt.hyper.batch_size, max_input_size, max_input_size, 1])
+elif opt.hyper.background_size == 'different_conditions':
+    image.set_shape([opt.hyper.batch_size, opt.hyper.image_size + (14 * 2), opt.hyper.image_size + (14 * 2), 1])
 else:
     image.set_shape([opt.hyper.batch_size, opt.hyper.image_size + (opt.hyper.background_size * 2), opt.hyper.image_size + (opt.hyper.background_size * 2), 1])
 
@@ -162,7 +208,7 @@ if save_images:
 # Call DNN
 dropout_rate = tf.placeholder(tf.float32)
 to_call = getattr(nets, opt.dnn.name)
-y, parameters, activations = to_call(image, dropout_rate, opt, dataset.list_labels)
+y, parameters, activations, inputs = to_call(image, dropout_rate, opt, dataset.list_labels)
 
 # Loss function
 with tf.name_scope('loss'):
@@ -250,7 +296,8 @@ with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
     else:
         print("RESTORE")
-        saver.restore(sess, tf.train.latest_checkpoint(opt.log_dir_base + opt.name + '/models/'))
+        print('Log directory in restore:', opt.log_dir_base)
+        saver.restore(sess, opt.log_dir_base + opt.name + '/models/model-19')
         flag_testable = True
 
     # datasets
@@ -336,16 +383,20 @@ with tf.Session() as sess:
         sess.run(train_iterator_full.initializer)
         acc_tmp = 0.0
         for num_iter in range(1 if make_activations else int(dataset.num_images_epoch/opt.hyper.batch_size)):
-            acc_val, train_activations = sess.run([accuracy, activations], feed_dict={handle: train_handle_full, dropout_rate: opt.hyper.drop_test})
+            acc_val, train_activations, train_inputs = sess.run([accuracy, activations, inputs], feed_dict={handle: train_handle_full, dropout_rate: opt.hyper.drop_test})
             acc_tmp += acc_val
 
-        print('ACTIVATIONS LENGTH:', len(train_activations))
-        print('ACTIVATIONS TYPE:', type(train_activations[0]))
-        print('ACTIVATIONS SIZE:', [ta.shape for ta in train_activations])
+        conv2 = train_activations[1]
+        print('CONV2 MAX:', np.max(conv2))
+        print('CONV2 MIN:', np.min(conv2))
 
         if make_activations:
-            np.savez(opt.log_dir_base + opt.name + '/train_activations', conv1=train_activations[0], 
-                     conv2=train_activations[1], fc1=train_activations[2], fc2=train_activations[3])
+            np.savez(opt.log_dir_base + opt.name + '/train_' + sys.argv[2] + '_bg' + str(test_background_size),
+                     conv1=train_activations[0], 
+                     conv2=train_activations[1], 
+                     fc1=train_activations[2], 
+                     fc2=train_activations[3],
+                     inputs=train_inputs[0]) 
 
         train_acc = acc_tmp / (1. if make_activations else float(dataset.num_images_epoch/opt.hyper.batch_size))
         print("Full train acc = " + str(train_acc))
@@ -376,7 +427,7 @@ with tf.Session() as sess:
         print("Full test acc: " + str(test_acc))
 
         # Record data	TODO uncomment after figuring out synchronization
-        with open(opt.log_dir_base + opt.name + '/results.json', 'w') as rf:
+        with open(opt.log_dir_base + opt.name + '/' + opt.results_file, 'w') as rf:
             results = {'background_size': opt.hyper.background_size,
                        'num_train_ex': opt.hyper.num_train_ex,
                        'batch_size': opt.hyper.batch_size,
@@ -384,6 +435,9 @@ with tf.Session() as sess:
                        'train_acc': train_acc,
                        'val_acc': val_acc,
                        'test_acc': test_acc}
+            if 'testbg' in opt.results_file:
+                results['test_background_size'] = opt.hyper.background_size
+                results['background_size'] = opt.hyper.train_background_size
             json.dump(results, rf)
 
         print('\n')

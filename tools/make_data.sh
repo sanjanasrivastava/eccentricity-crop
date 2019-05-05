@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH -n 2
+#SBATCH -n 1
 #SBATCH --array=0-9
 #SBATCH --job-name=minimal
 #SBATCH --mem=80GB

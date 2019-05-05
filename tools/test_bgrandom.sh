@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH -n 2
+#SBATCH -c 2
 #SBATCH --array=466
 #SBATCH --job-name=minimal
 #SBATCH --mem=4GB

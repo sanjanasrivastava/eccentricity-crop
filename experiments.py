@@ -1,5 +1,7 @@
 import itertools
 import numpy as np
+import pickle
+
 LIMIT_TESTS = False	# Toggle based on whether we want to run exhaustive experiments or a subset 
 
 
@@ -103,6 +105,7 @@ class Hyperparameters(object):	# TODO change for MNIST
         self.num_train_ex = 2**3
         self.full_size = False
         self.inverted_pyramid = False
+        self.train_background_size = None	# Only used for different condition experiments, will be set below
 
     def set_background_size(self, background_size):
 #         self.image_size += background_size
@@ -113,7 +116,7 @@ class Experiments(object):
 
     def __init__(self, id, name):
         self.name = "base"
-        self.log_dir_base = '/om2/user/sanjanas/eccentricity-data/models/'
+        self.log_dir_base = '/om/user/sanjanas/eccentricity-data/models/'
             # '/om/user/sanjanas/eccentricity-data/models/' 
             #"/om/user/xboix/share/minimal-pooling/models/"
             #"/Users/xboix/src/minimal-cifar/log/"
@@ -144,12 +147,18 @@ class Experiments(object):
 
         # Add ID to name:
         self.ID = id
-        self.name = 'ID' + str(self.ID) + "_" + name
+        if id < 8650 or id >= 8790:
+            self.name = 'ID' + str(self.ID) + "_" + name
+        else:
+            self.name = name
 
         # Add additional descriptors to Experiments
         self.dataset = Dataset()
         self.dnn = DNN()
         self.hyper = Hyperparameters()
+
+	# Add file for saving results
+        self.results_file = 'results.json'
 
     def do_recordings(self, max_epochs):
         self.max_to_keep_checkpoints = 0
@@ -191,6 +200,46 @@ for num_train_ex in num_train_exs:
     idx += 1
 
 
+
+def calculate_IDs(rfull_size, rbackground_size, rnum_train_ex, rbatch_size, rlearning_rate):
+
+    FS = len(full_sizes)
+    BG = len(background_sizes)
+    NTE = data_offset = len(num_train_exs)
+    BS = len(batch_sizes)
+    LR = len(learning_rates)
+    random_bg_offset = FS * BG * NTE * BS * LR 
+    inverted_pyramid_offset = random_small_offset = NTE * BS * LR
+    
+    IDs, ID_subs = ([] for __ in range(2))
+
+    for fs, bg, nte, bs, lr in itertools.product(rfull_size, rbackground_size, rnum_train_ex, rbatch_size, rlearning_rate): 
+        i_nte = num_train_exs.index(nte)
+        i_bs = batch_sizes.index(bs)
+        i_lr = learning_rates.index(lr)
+        ID = i_lr + (i_bs * LR) + (i_nte * LR * BS) + data_offset
+        ID_subs.append(ID)
+
+        if type(bg) == int:	# TODO change if another int-labeled background_size gets tacked on for another experiment
+            i_fs = int(fs)
+            i_bg = background_sizes.index(bg)
+            BG_add = i_bg * LR * BS * NTE
+            FS_add = i_fs * BG * NTE * BS * LR
+            ID += BG_add + FS_add
+
+        else:
+            ID += random_bg_offset
+            if bg != 'random':
+                ID += inverted_pyramid_offset
+                if bg != 'inverted_pyramid':
+                    ID += random_small_offset     
+
+        IDs.append(ID)
+
+    return IDs, ID_subs
+
+
+# MAKE EXPERIMENTS
 for name_NN, num_layers_NN, max_epochs_NN in zip(name, num_layers, max_epochs):
 
     for full_size in full_sizes:
@@ -289,47 +338,121 @@ for name_NN, num_layers_NN, max_epochs_NN in zip(name, num_layers, max_epochs):
                 idx += 1
 
 
-def calculate_IDs(rfull_size, rbackground_size, rnum_train_ex, rbatch_size, rlearning_rate):
+    # Black background at training, variable background at testing
+    for data in opt[:len(num_train_exs)]:
+        for batch_size in batch_sizes:
+            for learning_rate in learning_rates:
+                exp = Experiments(idx, name_NN + '_' + 'different_conditions_' + 'numtrainex' + str(data.hyper.num_train_ex))
+                exp.hyper.background_size = 'different_conditions'
+                exp.hyper.num_train_ex = data.hyper.num_train_ex
+                exp.hyper.learning_rate = learning_rate
+                exp.hyper.batch_size = batch_size
+                exp.hyper.full_size = False
 
-    FS = len(full_sizes)
-    BG = len(background_sizes)
-    NTE = data_offset = len(num_train_exs)
-    BS = len(batch_sizes)
-    LR = len(learning_rates)
-    random_bg_offset = FS * BG * NTE * BS * LR 
-    inverted_pyramid_offset = random_small_offset = NTE * BS * LR
-    
-    IDs, ID_subs = ([] for __ in range(2))
+                exp.dnn.name = name_NN
+                exp.dnn.set_num_layers(num_layers_NN)
+                exp.dnn.neuron_multiplier.fill(3)
 
-    for fs, bg, nte, bs, lr in itertools.product(rfull_size, rbackground_size, rnum_train_ex, rbatch_size, rlearning_rate): 
-        i_nte = num_train_exs.index(nte)
-        i_bs = batch_sizes.index(bs)
-        i_lr = learning_rates.index(lr)
-        ID = i_lr + (i_bs * LR) + (i_nte * LR * BS) + data_offset
-        ID_subs.append(ID)
+                exp.dataset.reuse_tfrecords(data)
+                exp.hyper.max_num_epochs = int(max_epochs_NN)
+                exp.dataset.max_num_epochs = int(max_epochs_NN)
+                exp.hyper.num_epochs_per_decay = int(exp.hyper.num_epochs_per_decay)
+                opt.append(exp)
+                if exp.hyper.batch_size == 10 and exp.hyper.num_train_ex in [8, 256]:
+                    # print('DIFFERENT CONDITIONS IDX:', idx - 8160)
+                    pass
+                idx += 1
 
-        if type(bg) == int:	# TODO change if another int-labeled background_size gets tacked on for another experiment
-            i_fs = int(fs)
-            i_bg = background_sizes.index(bg)
-            BG_add = i_bg * LR * BS * NTE
-            FS_add = i_fs * BG * NTE * BS * LR
-            ID += BG_add + FS_add
+    print('opt length:', len(opt))
 
-        else:
-            ID += random_bg_offset
-            if bg != 'random':
-                ID += inverted_pyramid_offset
-                if bg != 'inverted_pyramid':
-                    ID += random_small_offset     
 
-        IDs.append(ID)
+    # Changed conditions ONLY FOR INVERTED PYRAMID AND RANDOM 
+    for train_background_size in ['random', 'inverted_pyramid']:
+        for train_data in opt[:len(num_train_exs)]:
+            for test_background_size in background_sizes:
+	       
+                # Identify best model given these training params
+                with open(exp.log_dir_base + 'optimal_models.pickle', 'rb') as ofile:
+                    optimal_models = pickle.load(ofile)
+                try:
+                    obatch_size, olearning_rate = optimal_models[(True, train_background_size, train_data.hyper.num_train_ex)]
+                except KeyError:
+                    # print('Ideal learning rate has not been established, cannot test model: trainbg %s, trainnte %s' % (train_background_size, train_data.hyper.num_train_ex))
+                    opt.append(None)
+                    idx += 1
+                    continue
+                optimal_id, __ = calculate_IDs([True], [train_background_size], [train_data.hyper.num_train_ex], [obatch_size], [olearning_rate])
+	        
+                # Load desired model, save results under different name from same-condition results
+                exp = Experiments(idx, opt[optimal_id[0]].name)
+                exp.results_file = 'results_testbg' + str(test_background_size) + '.json'
 
-    return IDs, ID_subs
+                exp.dataset.reuse_tfrecords(train_data)
+                exp.dnn.name = name_NN
+                exp.dnn.set_num_layers(num_layers_NN)
+                exp.dnn.neuron_multiplier.fill(3)
+                exp.hyper.max_num_epochs = int(max_epochs_NN)
+                exp.dataset.max_num_epochs = int(max_epochs_NN)
+                exp.hyper.num_epochs_per_decay = int(exp.hyper.num_epochs_per_decay)
+                if train_background_size == 'inverted_pyramid':
+                    exp.dnn.num_input_channels = 5
+                
+                # For constructing testing images in main.py
+                exp.hyper.full_size = True
+                exp.hyper.background_size = test_background_size	
+                exp.hyper.train_background_size = train_background_size
+                exp.hyper.batch_size = obatch_size
+                exp.hyper.learning_rate = olearning_rate
+                exp.hyper.num_train_ex = train_data.hyper.num_train_ex
+
+                # To skip training
+                exp.test = True
+                
+                opt.append(exp)
+                if train_background_size == 'random' and exp.hyper.background_size in [0, 3, 7, 14, 28, 56] and exp.hyper.num_train_ex in [8, 16, 32, 64, 128, 256]:
+                    print(idx - 8650)
+                idx += 1
+
+
+    # Inverted pyramid architecture trained on fixed-scale data
+    for background_size in background_sizes:
+        for data in opt[:len(num_train_exs)]:
+            for learning_rate in learning_rates:
+
+                # exp = Experiments(idx, name_NN + '_' + 'inverted' + 'numtrainex' + str(data.hyper.num_train_ex))
+                exp = Experiments(idx, '_'.join([name_NN, 'inverted_pyramid', 'numtrainex' + str(data.hyper.num_train_ex), 'backgroundsize' + str(background_size)]))
+
+                exp.hyper.background_size = background_size     # All data should have the same amount of background...
+                exp.hyper.num_train_ex = data.hyper.num_train_ex
+                exp.hyper.learning_rate = learning_rate
+                exp.hyper.batch_size = 40
+                exp.hyper.full_size = True	# so that it always gets resized up 
+
+                exp.dnn.name = name_NN
+                exp.dnn.set_num_layers(num_layers_NN)
+                exp.dnn.neuron_multiplier.fill(3)
+                exp.dnn.num_input_channels = 5
+
+                exp.dataset.reuse_tfrecords(data)
+                exp.hyper.max_num_epochs = int(max_epochs_NN)
+                exp.dataset.max_num_epochs = int(max_epochs_NN)
+                exp.hyper.num_epochs_per_decay = int(exp.hyper.num_epochs_per_decay)
+                opt.append(exp)
+
+                if exp.hyper.background_size == 112:
+                    # print(idx - 8790)
+                    pass
+                idx += 1
+
+
+
+
 
 
 if __name__ == '__main__':
     # print(calculate_IDs([False, True], [3, 14, 28], [16, 32], [40], learning_rates[:]))
     # print(calculate_IDs(background_sizes[:], [8], [128], [0.1]))
     # print(calculate_randombg_IDs(num_train_exs[:], [40], learning_rates[:]))
-    print(calculate_IDs([True], [56], [8, 16, 32, 64, 128, 256], [40], learning_rates[:]))
+    print(calculate_IDs([True], ['inverted_pyramid'], [8, 256], [40], learning_rates[:]))
+    print(calculate_IDs([True], ['random_small'], [8, 256], [40], learning_rates[:]))
 
