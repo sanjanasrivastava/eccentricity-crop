@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH -n 1
-#SBATCH --array=186-189
+#SBATCH --array=1,80,266,
 #SBATCH --job-name=activations
 #SBATCH --mem=4GB
 #SBATCH --gres=gpu:tesla-k80:1

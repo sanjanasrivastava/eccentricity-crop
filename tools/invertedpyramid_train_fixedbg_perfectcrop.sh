@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH -n 1
-#SBATCH --array=34-39,82-87,130-135,178-183,226-231,274-280 
+#SBATCH --array=0,1,4,8,12,16,20,24,30,36,41,48,56,62,67,72,78,84,90,97,105,112,119,125,131,138,145,152,158,165,172
 #SBATCH --job-name=activations
 #SBATCH --mem=4GB
 #SBATCH --gres=gpu:tesla-k80:1
@@ -17,7 +17,6 @@ hostname
 cd /om/user/sanjanas/eccentricity-crop
 echo "COMMAND LINE VERSION"
 python -V
-# singularity exec -B /om2:/om2 -B /om:/om --nv /om/user/xboix/singularity/xboix-tensorflow.simg python -c 'import tensorflow; import sys; print("STRING CALL VERSION:", sys.version); print("SUCCESSFULLY IMPORTED TENSORFLOW")'
 singularity exec -B /om:/om --nv /om/user/xboix/singularity/xboix-tensorflow.simg \
-python /om/user/sanjanas/eccentricity-crop/main.py $((${SLURM_ARRAY_TASK_ID} + 4320)) 
+python /om/user/sanjanas/eccentricity-crop/main.py $((${SLURM_ARRAY_TASK_ID} + 9210)) 
 echo "sanji"

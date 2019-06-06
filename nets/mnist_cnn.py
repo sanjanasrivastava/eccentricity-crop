@@ -37,6 +37,7 @@ def mnist_cnn(x, opt, labels_id, dropout_rate):
         summ.variable_summaries(kernel, biases, opt)
         summ.activation_summaries(conv1, opt)
         activations += [conv1]
+        parameters.append(kernel)
 
     # pool1
     pool1 = tf.nn.max_pool(conv1, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='SAME', name='pool1')
@@ -56,6 +57,7 @@ def mnist_cnn(x, opt, labels_id, dropout_rate):
         summ.variable_summaries(kernel, biases, opt)
         summ.activation_summaries(conv2, opt)
         activations += [conv2]
+        parameters.append(kernel)
 
     # pool2
     pool2 = tf.nn.max_pool(conv2, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='SAME', name='pool2')
@@ -76,6 +78,7 @@ def mnist_cnn(x, opt, labels_id, dropout_rate):
         summ.variable_summaries(weights, biases, opt)
         summ.activation_summaries(fc3, opt)
 
+    # Softmax not applied because the crossentropy function takes unscaled logits
     with tf.variable_scope('softmax_linear', reuse=reuse) as scope:
         # weights = tf.get_variable(initializer=tf.random_normal([num_neurons[2], num_classes]), name='weights')
         weights = tf.get_variable('weights', shape=[num_neurons[2], num_classes], initializer=xavier_initializer())

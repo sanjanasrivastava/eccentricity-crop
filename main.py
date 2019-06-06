@@ -10,6 +10,7 @@ import pickle
 import tensorflow as tf
 import experiments
 from datasets import mnist_dataset 
+import image_transformation
 from nets import nets
 from util import summary
 
@@ -26,24 +27,47 @@ opt = experiments.opt[ID]
 train_background_size = test_background_size = None
 
 # Check if making model or getting activations
-if len(sys.argv) > 2 and (sys.argv[2] == 'activations' or sys.argv[2] == 'changed_condition_activations'): 
-    opt.test = True
-    with open(opt.log_dir_base + 'optimal_models.pickle', 'rb') as ofile:
-        optimal_models = pickle.load(ofile)
-    try:
-        if optimal_models[(opt.hyper.full_size, opt.hyper.background_size, opt.hyper.num_train_ex)][1] == opt.hyper.learning_rate:
-            print('OPTIMAL LEARNING RATE')
-            make_activations = True
-        else:
-            print('Suboptimal learning rate, exiting script.')
+if False:       # turning off for IDs 8650-8671, where changed conditions and optimal models are built into opt
+    if len(sys.argv) > 2 and (sys.argv[2] == 'activations' or sys.argv[2] == 'changed_condition_activations'): 
+        opt.test = True
+        with open(opt.log_dir_base + 'optimal_models.pickle', 'rb') as ofile:
+            optimal_models = pickle.load(ofile)
+        try:
+            if optimal_models[(opt.hyper.full_size, opt.hyper.background_size, opt.hyper.num_train_ex)][1] == opt.hyper.learning_rate:
+                print('OPTIMAL LEARNING RATE')
+                make_activations = True
+            else:
+                print('Suboptimal learning rate, exiting script.')
+                print(':)')
+                sys.exit()
+        except KeyError:
+            print('Ideal learning rate has not been established, exiting script.')
             sys.exit()
-    except KeyError:
-        print('Ideal learning rate has not been established, exiting script.')
-        sys.exit()
+    
+        if sys.argv[2] == 'changed_condition_activations':
+            train_background_size = opt.hyper.background_size
+            test_background_size = 56		# TODO hardcoded; change as needed
 
-    if sys.argv[2] == 'changed_condition_activations':
-        train_background_size = opt.hyper.background_size
-        test_background_size = 56		# TODO hardcoded; change as needed
+# Changing paradigm from above because ID=8650-8761 (trainrandomtestfixed) is set up for this and approaches it a little differently
+# Here, opt.background_size is the test background size
+# NOTE for these, the optimal model has been determined already, so no need to find the presets
+if len(sys.argv) > 2 and sys.argv[2] == 'activations':
+    opt.test = True
+    make_activations = True
+    test_background_size = opt.hyper.background_size
+#     with open(opt.log_dir_base + 'optimal_models.pickle', 'rb') as ofile:
+#         optimal_models = pickle.load(ofile)
+#     try:
+#         if optimal_models[(opt.hyper.full_size, opt.hyper.train_background_size, opt.hyper.num_train_ex)][1] == opt.hyper.learning_rate:
+#             print('OPTIMAL LEARNING RATE')
+#             make_activations = True
+#         else:
+#             print('Suboptimal learning rate, exiting script.')
+#             print(':)')
+#             sys.exit()
+#     except KeyError:
+#         print('Ideal learning rate has not been established, exiting script.')
+#         sys.exit()
 
 else:
     make_activations = False
@@ -110,7 +134,8 @@ ims = tf.unstack(images_in, axis=0)
 
 
 max_input_size = 140
-make_background = True
+make_background = False
+make_background_externally = True
 standardization = True	# TODO toggle based on what's best 
 if make_background:
 
@@ -180,6 +205,33 @@ if make_background:
             imc = tf.image.per_image_standardization(imc)
         process_ims.append(imc)
 
+elif make_background_externally:
+   process_ims = []
+   for im in ims:
+       if 8650 <= ID <= 8691:     # test images specifically
+           imc, final_image_shape = image_transformation.resize_object_fixed_background(im, opt)
+       elif 8720 <= ID <= 8761:   # test images specifically
+           imc, final_image_shape = image_transformation.resize_object_fixed_background_invertedpyramid(im, opt)
+       elif 8790 <= ID <= 9209:
+           imc, final_image_shape = image_transformation.resize_object_fixed_background_invertedpyramid(im, opt)
+       elif 9210 <= ID <= 9389:
+           imc, final_image_shape = image_transformation.resize_object_fixed_background_invertedpyramid(im, opt)
+       elif 9390 <= ID <= 9392:
+           imc, final_image_shape = im, [opt.hyper.batch_size, opt.hyper.image_size, opt.hyper.image_size, 1]
+       elif 9393 <= ID <= 9716:
+           imc, final_image_shape = image_transformation.resize_object_fixed_background_invertedpyramid(im, opt)
+       elif (4320 <= ID <= 4600) or (5760 <= ID <= 6040):
+           imc, final_image_shape = image_transformation.resize_object_fixed_background(im, opt)
+       # FCN, vanilla input, train test fixed
+       elif 9717 <= ID <= 9932:         
+           imc, final_image_shape = image_transformation.resize_object_fixed_background(im, opt)
+       # FCN, vanilla input, train random 
+       elif 9933 <= ID <= 9968:
+           imc, final_image_shape = image_transformation.resize_object_random_background(im, opt)
+
+       imc = tf.image.per_image_standardization(imc)
+       process_ims.append(imc)
+
 else:
     process_ims = [tf.image.per_image_standardization(im) if standardization else im for im in ims]
 
@@ -188,14 +240,22 @@ if make_activations and sys.argv[2] == 'changed_condition_activations':
     opt.hyper.background_size = train_background_size
 
 image = tf.stack(process_ims)
-if opt.hyper.background_size == 'inverted_pyramid' or opt.hyper.background_size == 'random_small' or train_background_size == 'inverted_pyramid':
-    image.set_shape([opt.hyper.batch_size, opt.hyper.image_size, opt.hyper.image_size, opt.dnn.num_input_channels])
-elif opt.hyper.full_size:		# this covers all cases where opt.hyper.background_size == 'random'
-    image.set_shape([opt.hyper.batch_size, max_input_size, max_input_size, 1])
-elif opt.hyper.background_size == 'different_conditions':
-    image.set_shape([opt.hyper.batch_size, opt.hyper.image_size + (14 * 2), opt.hyper.image_size + (14 * 2), 1])
-else:
-    image.set_shape([opt.hyper.batch_size, opt.hyper.image_size + (opt.hyper.background_size * 2), opt.hyper.image_size + (opt.hyper.background_size * 2), 1])
+
+
+if make_background:
+    if opt.hyper.background_size == 'inverted_pyramid' or opt.hyper.background_size == 'random_small' or train_background_size == 'inverted_pyramid':
+        image.set_shape([opt.hyper.batch_size, opt.hyper.image_size, opt.hyper.image_size, opt.dnn.num_input_channels])
+    elif opt.hyper.full_size:		# this covers all cases where opt.hyper.background_size == 'random'
+        image.set_shape([opt.hyper.batch_size, max_input_size, max_input_size, 1])
+    elif opt.hyper.background_size == 'different_conditions':
+        image.set_shape([opt.hyper.batch_size, opt.hyper.image_size + (14 * 2), opt.hyper.image_size + (14 * 2), 1])
+    else:
+        image.set_shape([opt.hyper.batch_size, opt.hyper.image_size + (opt.hyper.background_size * 2), opt.hyper.image_size + (opt.hyper.background_size * 2), 1])
+
+elif make_background_externally:
+    print('Image Shape:', image.get_shape())
+    print('Final Image Shape:', final_image_shape)
+    image.set_shape(final_image_shape)
 
 print('IMAGE:', image)
 
@@ -208,6 +268,7 @@ if save_images:
 # Call DNN
 dropout_rate = tf.placeholder(tf.float32)
 to_call = getattr(nets, opt.dnn.name)
+print('TO CALL:', to_call)
 y, parameters, activations, inputs = to_call(image, dropout_rate, opt, dataset.list_labels)
 
 # Loss function
@@ -373,6 +434,9 @@ with tf.Session() as sess:
     # RUN TEST
     ################################################################################################
 
+    if 9390 <= ID <= 9392:
+      flag_testable = False
+
     if flag_testable:
 
         test_handle_full = sess.run(test_iterator_full.string_handle())
@@ -383,7 +447,7 @@ with tf.Session() as sess:
         sess.run(train_iterator_full.initializer)
         acc_tmp = 0.0
         for num_iter in range(1 if make_activations else int(dataset.num_images_epoch/opt.hyper.batch_size)):
-            acc_val, train_activations, train_inputs = sess.run([accuracy, activations, inputs], feed_dict={handle: train_handle_full, dropout_rate: opt.hyper.drop_test})
+            acc_val, train_parameters, train_activations, train_inputs = sess.run([accuracy, parameters, activations, inputs], feed_dict={handle: train_handle_full, dropout_rate: opt.hyper.drop_test})
             acc_tmp += acc_val
 
         conv2 = train_activations[1]
@@ -394,9 +458,10 @@ with tf.Session() as sess:
             np.savez(opt.log_dir_base + opt.name + '/train_' + sys.argv[2] + '_bg' + str(test_background_size),
                      conv1=train_activations[0], 
                      conv2=train_activations[1], 
-                     fc1=train_activations[2], 
-                     fc2=train_activations[3],
-                     inputs=train_inputs[0]) 
+                     kernel1=train_parameters[0],
+                     kernel2=train_parameters[1],
+                     inputs=train_inputs[0])
+
 
         train_acc = acc_tmp / (1. if make_activations else float(dataset.num_images_epoch/opt.hyper.batch_size))
         print("Full train acc = " + str(train_acc))
@@ -404,12 +469,13 @@ with tf.Session() as sess:
 
         # Run one pass over a batch of the validation dataset.
         sess.run(val_iterator_full.initializer)
-        acc_tmp = 0.0
+        acc_tmp = 0.
         for num_iter in range(int(dataset.num_images_val/opt.hyper.batch_size)):
             acc_val = sess.run([accuracy], feed_dict={handle: validation_handle_full,
                                                       dropout_rate: opt.hyper.drop_test})
             acc_tmp += acc_val[0]
 
+        print('COMPLETED FOR LOOP')
         val_acc = acc_tmp / float(dataset.num_images_val/opt.hyper.batch_size)
         print("Full val acc = " + str(val_acc))
         sys.stdout.flush()

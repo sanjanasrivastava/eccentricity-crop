@@ -10,13 +10,19 @@ import numpy as np
 import os
 import pickle  
 from PIL import Image
+import tensorflow as tf
 # import seaborn as sns
 
 
 PATH_TO_VIS_DATA = '/om/user/sanjanas/eccentricity-data/visualizations/'
 
 
-def get_optimal_model(full_sizes, background_sizes, num_train_exs, batch_sizes, learning_rates, fixed_inv_pyr=False, inv_pyr_test_fixed=False, random_test_fixed=False):
+def get_optimal_model(full_sizes, background_sizes, num_train_exs, batch_sizes, learning_rates, 
+                      fixed_inv_pyr=False, 
+                      fixed_inv_pyr_truncated=False,
+                      inv_pyr_test_fixed=False, 
+                      random_test_fixed=False,
+                      invpyr_perfectcrops=False):
     '''
     Get the ideal network for a certain full_size/background_size/num_train_ex combo, save in a json.
       Each entry: (<full_size>, <background_size>, <num_train_ex>) : (batch_size, learning_rate)
@@ -35,9 +41,14 @@ def get_optimal_model(full_sizes, background_sizes, num_train_exs, batch_sizes, 
     # Get various accuracies in matrices
     train_accuracies, val_accuracies, test_accuracies = (np.zeros((BG, NTE, LR)) for __ in range(3))
     if fixed_inv_pyr:
+        IDs = list(range(9393,9716))           # num_train_ex 1-256, batch_size=8 instead of some being 8 and some being 40
+#        IDs = list(range(9393, 9501))           # num_train_ex 1, 2, 4 come before larger num_train_ex
+#         for mul in range(6):
+#             IDs.extend([i + (mul * 60) + 8790 for i in range(0, 36)])
+    elif fixed_inv_pyr_truncated:
         IDs = []
         for mul in range(6):
-            IDs.extend([i + (mul * 60) + 8790 for i in range(0, 36)])
+            IDs.extend([i + (mul * 54) + 9393 for i in range(18, 54)])
     elif inv_pyr_test_fixed:
         IDs = []
         for mul in range(6):
@@ -46,10 +57,14 @@ def get_optimal_model(full_sizes, background_sizes, num_train_exs, batch_sizes, 
         IDs = []
         for mul in range(6):
             IDs.extend([i + (mul * 7) + 8650 for i in range(6)])
+    elif invpyr_perfectcrops:
+        IDs = range(9210, 9390)
+        IDs = []
+        for mul in range(3):
+            IDs.extend([i + (mul * 60) + 9210 for i in range(36)])
     else:
         IDs, __ = calculate_IDs(full_sizes, background_sizes, num_train_exs, batch_sizes, learning_rates)
     for ID in IDs:
-        print('ID:', ID)
         iopt = opt[ID]
         bg = bg_lookup[iopt.hyper.background_size]
         nte = nte_lookup[iopt.hyper.num_train_ex]
@@ -148,14 +163,62 @@ def background_use_statistics(full_size, background_size, num_train_ex):
         try:
             plt.hist(sigmas, bins=20)
         except AttributeError:
-            print 'full size:', full_size, '; background size:', background_size, '; num train ex:', num_train_ex
-            print sigmas
             return
         plt.savefig(os.path.join(dirname, '_'.join([layer_name, 'featuremap', 'stddevs']) + '.pdf'))
 
 
 
-def visualize_mnist_activations(full_size, background_size, num_train_ex, test_bg=None):
+def visualize_separate_ip_activations():
+    '''
+    Get activations and filters for random-trained inverted pyramid tested on fixed background. 
+    Convolve each crop of the inverted pyramid with its corresponding kernel channel.
+    Visualize the results.
+
+    Only conv1 is really relevant because conv2 is combining feature maps.
+    '''
+
+    for ID in range(8720, 8762):
+        iopt = opt[ID]
+        activations = np.load(iopt.log_dir_base + iopt.name + (('/train_activations_bg' + str(iopt.hyper.background_size) + '.npz')))
+        sample_idx = np.array([15, 30])
+        featuremap_idx = np.arange(0, 32, 2)
+        dirname = PATH_TO_VIS_DATA + os.path.join('architecture_splitinvertedpyramid',
+                                                  'fullsize_True',
+                                                  'backgroundsize_' + str(iopt.hyper.background_size),
+                                                  'num_train_ex' + str(iopt.hyper.num_train_ex))
+
+        if not os.path.exists(dirname):
+            os.makedirs(dirname)
+
+        inputs = activations['inputs'][sample_idx, :, :, :]
+        image1, image2 = inputs
+        kernels = activations['kernel1'][:, :, :, featuremap_idx]        # [height, width, channels, maps]
+        kernels = np.moveaxis(kernels, -1, 0)   # [maps, height, width, channels] so I can iterate through
+        
+        with tf.Session() as sess:
+            i = 0
+            for image in inputs:
+                j = 0
+                for kernel in kernels:
+                    for channel_idx in range(iopt.dnn.num_input_channels):
+                        M = tf.expand_dims(tf.expand_dims(tf.convert_to_tensor(image[:, :, channel_idx]), axis=0), axis=-1)
+                        K = tf.expand_dims(tf.expand_dims(tf.convert_to_tensor(kernel[:, :, channel_idx]), axis=-1), axis=-1)
+                        M_ = tf.nn.conv2d(M, K, [1, 1, 1, 1], padding='SAME')
+                        conv_mat = np.squeeze(M_.eval(session=sess))
+
+                        conv_mat -= np.min(conv_mat)
+                        conv_mat *= 255. / np.max(conv_mat)
+                        conv_mat = conv_mat.astype(np.uint8)
+                        conv_image = Image.fromarray(conv_mat, mode='L')
+
+                        conv_image.save(os.path.join(dirname, '_'.join(['im' + str(sample_idx[i]), 'map' + str(featuremap_idx[j]), 'crop' + str(channel_idx)])), 'JPEG')
+
+                    j += 1
+                i += 1
+
+
+
+def visualize_mnist_activations(architecture, full_size, background_size, num_train_ex, test_bg=None, override_id=None):
     '''
     Save JPEG visualizations of activations from the optimal model parametrized here.
     Does one at a time because I don't expect to be using this heavily, as it's for vis.
@@ -163,6 +226,8 @@ def visualize_mnist_activations(full_size, background_size, num_train_ex, test_b
     If visualizing an architecture tested under a changed condition from training, 
     test_bg holds the appropriate background_size. Assuming these are 
     full_size because otherwise how the fuck would you compare?????????????
+
+    If using an ID that can't be accessed from experiments.calculate_IDs, put it in override_id.
  
     NOTE: Currently assumes 'mnist_cnn' architecture.
     '''
@@ -175,14 +240,19 @@ def visualize_mnist_activations(full_size, background_size, num_train_ex, test_b
     except KeyError:
         print('Ideal learning rate has not been established, cannot visualize for these parameters.')
         return
-    ID, __ = calculate_IDs([full_size], [background_size], [num_train_ex], [obatch_size], [olearning_rate])
+    if override_id is not None:
+        ID = override_id
+    else:
+        ID, __ = calculate_IDs([full_size], [background_size], [num_train_ex], [obatch_size], [olearning_rate])
+        ID = ID[0]
     print('OPTIMAL ID:', ID)
-    iopt = opt[ID[0]]
-    activations = np.load(iopt.log_dir_base + iopt.name + (('/train_changed_condition_activations_bg' + str(test_bg) + '.npz') if test_bg is not None  else '/train_activations.npz'))
+    iopt = opt[ID]
+    activations = np.load(iopt.log_dir_base + iopt.name + (('/train_activations_bg' + str(test_bg) + '.npz'))) 
     print(iopt.log_dir_base + iopt.name)
 
-    sample_idx = np.array([15, 30])
-    dirname = PATH_TO_VIS_DATA + os.path.join('fullsize_' + str(full_size),
+    sample_idx = np.array([2, 6]) if 9393 <= ID <= 9716 else np.array([15, 30])         # tinydata uses batch size = 8
+    dirname = PATH_TO_VIS_DATA + os.path.join('architecture_' + str(architecture),
+                                              'fullsize_' + str(full_size),
                                               'backgroundsize_' + str(background_size), 
                                               'numtrainex_' + str(num_train_ex))
     if not os.path.exists(dirname):
@@ -210,7 +280,7 @@ def visualize_mnist_activations(full_size, background_size, num_train_ex, test_b
                     m *= 255. / np.max(m)
                     m = m.astype(np.uint8)
                     im = Image.fromarray(m, mode='L')
-                    im.save(os.path.join(dirname, '_'.join([layer_name, 'im' + str(sample_idx[i]), 'map' + str(feature_map_idx[j]), (('testbg' + str(test_bg)) if test_bg is not None else '')])), 'JPEG')
+                    im.save(os.path.join(dirname, '_'.join([layer_name, 'im' + str(sample_idx[i]), 'map' + str(feature_map_idx[j]), 'testbg' + str(test_bg)])), 'JPEG')
                     j += 1
             else:
                 continue							# Not saving FC
@@ -219,7 +289,13 @@ def visualize_mnist_activations(full_size, background_size, num_train_ex, test_b
             i += 1
 
 
-def accuracy_v_num_train_ex(suffix, full_sizes, background_sizes, num_train_exs, batch_sizes, learning_rates, fixed_inv_pyr=False, inv_pyr_test_fixed=False, random_test_fixed=False):
+def accuracy_v_num_train_ex(suffix, full_sizes, background_sizes, num_train_exs, batch_sizes, learning_rates,
+                            plot_title=None,
+                            fixed_inv_pyr=False, 
+                            fixed_inv_pyr_truncated=False,
+                            inv_pyr_test_fixed=False, 
+                            random_test_fixed=False,
+                            invpyr_perfectcrops=False):
     '''
     Plot accuracy vs. num_train_ex, one curve per background_size. 
     NOTES
@@ -228,7 +304,7 @@ def accuracy_v_num_train_ex(suffix, full_sizes, background_sizes, num_train_exs,
     '''
     
     # TODO change to get from file
-    final_test_acc = get_optimal_model(full_sizes, background_sizes, num_train_exs, batch_sizes, learning_rates, fixed_inv_pyr=fixed_inv_pyr, inv_pyr_test_fixed=inv_pyr_test_fixed, random_test_fixed=random_test_fixed)
+    final_test_acc = get_optimal_model(full_sizes, background_sizes, num_train_exs, batch_sizes, learning_rates, fixed_inv_pyr=fixed_inv_pyr, fixed_inv_pyr_truncated=fixed_inv_pyr_truncated, inv_pyr_test_fixed=inv_pyr_test_fixed, random_test_fixed=random_test_fixed, invpyr_perfectcrops=invpyr_perfectcrops)
 
     fig = plt.figure()
     ax = fig.add_axes([0.1, 0.1, 0.8, 0.8])
@@ -236,9 +312,10 @@ def accuracy_v_num_train_ex(suffix, full_sizes, background_sizes, num_train_exs,
     for bg in range(len(background_sizes)):
 #     for results_per_bg in final_test_acc:
         results_per_bg = final_test_acc[bg]
-        plt.errorbar(x=num_train_exs, y=100*results_per_bg, fmt='--o' if type(background_sizes[bg]) != int else '-o', label=background_sizes[bg])
+        plt.errorbar(x=num_train_exs, y=100*results_per_bg, fmt='-o' if type(background_sizes[bg]) != int else '-o', label=background_sizes[bg] if background_sizes[bg] != 'random' else 'vanilla')
         plt.xscale('log')
         plt.xlim(8, 256)
+        plt.ylim(0, 100)
 
     # plt.xticks(num_train_exs, [str(num_train_ex) for num_train_ex in num_train_exs])
     ax.set_xticks(num_train_exs)
@@ -246,23 +323,67 @@ def accuracy_v_num_train_ex(suffix, full_sizes, background_sizes, num_train_exs,
     print(plt.xticks())
     print([str(label) for label in ax.get_xticklabels()])
 
-    ax.legend(loc='lower right', frameon='True', title='Input type')
+    ax.legend(loc='lower right', frameon='True', title='Background size')
+    ax.set_xlabel('Number of training examples (T)')
+    ax.set_ylabel('% Accuracy on test set')
+
+    # Hardcoded experiments 
+    if fixed_inv_pyr:
+        ax.set_title('Inverted pyramid trained and tested on fixed-background size inputs') 
+    elif fixed_inv_pyr_truncated:
+        ax.set_title('Inverted pyramid trained and tested on fixed-background size inputs (B >= 8)') 
+    elif invpyr_perfectcrops:
+        ax.set_title('Inverted pyramid trained and tested on fixed-background size inputs \n(one pyramid layer is always exactly the original object)')
+    elif inv_pyr_test_fixed:
+        ax.set_title('Inverted pyramid trained on random-background size inputs, \ntested on fixed-background size inputs')
+    elif random_test_fixed:
+        ax.set_title('Vanilla trained on random-background size inputs, \ntested on fixed-background size inputs')
+    else:
+        ax.set_title(plot_title)
+
     
-    plt.savefig('./test' + '_' + suffix + '.pdf')
+    plt.savefig('./' + suffix + '.pdf')
     plt.close()
 
 
 
 if __name__ == '__main__':
-    # get_optimal_model([True], ['random', 'inverted_pyramid'], [16, 32, 64, 128], [40], exp_learning_rates[:])
-    accuracy_v_num_train_ex('random_fixed_tests', [True], [0, 3, 7, 14, 28, 56], [8, 16, 32, 64, 128, 256], [40], exp_learning_rates[:], random_test_fixed=True)
-    accuracy_v_num_train_ex('inverted_pyramid_fixed_tests', [True], [0, 3, 7, 14, 28, 56], [8, 16, 32, 64, 128, 256], [40], exp_learning_rates[:], inv_pyr_test_fixed=True)
-    
-#     for train_bg in ['inverted_pyramid']:
-#         for num_train_ex in [8, 256]:
-#             for test_bg in [7, 56]:
-#                 visualize_mnist_activations(True, train_bg, num_train_ex, test_bg=test_bg)
-    # visualize_mnist_activations(True, 'inverted_pyramid', 256)
-    
+
+    visualize_separate_ip_activations()
+
+    if False:
+        for background_size in [7, 56]:
+            for num_train_ex in [8, 256]:
+                visualize_mnist_activations('vanilla', True, background_size, num_train_ex)
+
+    # Running visualize_mnist_activations for IDs that cannot be sourced from calculate_IDs
+    if False:
+         override_ids = list(range(9393, 9717))
+         i = 0
+         for background_size in [0, 3, 7, 14, 28, 56]:
+             for num_train_ex in [1, 2, 4, 8, 16, 32, 64, 128, 256]:
+                 for learning_rate in exp_learning_rates:
+     
+                     # Limit which activations are pulled
+                     if background_size not in [7, 56] or num_train_ex not in [8, 256]:
+                         i += 1
+                         continue
+                     
+                     # Get optimal model and parameters
+                     with open(opt[0].log_dir_base + 'optimal_models.pickle', 'rb') as ofile:
+                         optimal_models = pickle.load(ofile)
+                     try:
+                         obatch_size, olearning_rate = optimal_models[(True, background_size, num_train_ex)]
+                         if olearning_rate != learning_rate:
+                             i += 1
+                             continue
+                     except KeyError:
+                         print('Ideal learning rate has not been established, cannot visualize for these parameters.')
+                         i += 1
+                         continue
+     
+                     # Make and save visualization
+                     visualize_mnist_activations('invertedpyramid', True, background_size, num_train_ex, override_id=override_ids[i])
+                     i += 1
 
 
