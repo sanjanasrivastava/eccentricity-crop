@@ -111,6 +111,7 @@ def background_use_statistics(full_size, background_size, num_train_ex):
     NOTE: not to be used with background_size == 0.
     '''
 
+    # Select optimal model for each (num_train_ex, background_size) and retrieve npz of activations
     with open(opt[0].log_dir_base + 'optimal_models.pickle', 'rb') as ofile:
         optimal_models = pickle.load(ofile)
     try:
@@ -128,8 +129,9 @@ def background_use_statistics(full_size, background_size, num_train_ex):
     if not os.path.exists(dirname):
         os.makedirs(dirname) 
 
+    # Go through each layer in the activations
     for layer_name in activations:
-        if 'conv' not in layer_name:		# TODO deal with FC layers
+        if 'conv' not in layer_name:		# NOTE this was not extended to fully-connected layers 
             continue			
 
         # Get size parameters to cut matrix	TODO check if integer division has caused incorrect measures
@@ -187,6 +189,7 @@ def visualize_separate_ip_activations():
                                                   'backgroundsize_' + str(iopt.hyper.background_size),
                                                   'num_train_ex' + str(iopt.hyper.num_train_ex))
 
+
         if not os.path.exists(dirname):
             os.makedirs(dirname)
 
@@ -195,27 +198,51 @@ def visualize_separate_ip_activations():
         kernels = activations['kernel1'][:, :, :, featuremap_idx]        # [height, width, channels, maps]
         kernels = np.moveaxis(kernels, -1, 0)   # [maps, height, width, channels] so I can iterate through
         
-        with tf.Session() as sess:
-            i = 0
-            for image in inputs:
-                j = 0
-                for kernel in kernels:
-                    for channel_idx in range(iopt.dnn.num_input_channels):
-                        M = tf.expand_dims(tf.expand_dims(tf.convert_to_tensor(image[:, :, channel_idx]), axis=0), axis=-1)
-                        K = tf.expand_dims(tf.expand_dims(tf.convert_to_tensor(kernel[:, :, channel_idx]), axis=-1), axis=-1)
-                        M_ = tf.nn.conv2d(M, K, [1, 1, 1, 1], padding='SAME')
-                        conv_mat = np.squeeze(M_.eval(session=sess))
+        # Replace this (PyTorch-style TF mixed with NumPy)...
+        if False:
+            with tf.Session() as sess:
+                i = 0
+                for image in inputs:
+                    j = 0
+                    for kernel in kernels:
+                        for channel_idx in range(iopt.dnn.num_input_channels):
+                            M = tf.expand_dims(tf.expand_dims(tf.convert_to_tensor(image[:, :, channel_idx]), axis=0), axis=-1)
+                            K = tf.expand_dims(tf.expand_dims(tf.convert_to_tensor(kernel[:, :, channel_idx]), axis=-1), axis=-1)
+                            M_ = tf.nn.conv2d(M, K, [1, 1, 1, 1], padding='SAME')
+                            conv_mat = np.squeeze(M_.eval(session=sess))
+    
+                            conv_mat -= np.min(conv_mat)
+                            conv_mat *= 255. / np.max(conv_mat)
+                            conv_mat = conv_mat.astype(np.uint8)
+                            conv_image = Image.fromarray(conv_mat, mode='L')
+    
+                            conv_image.save(os.path.join(dirname, '_'.join(['im' + str(sample_idx[i]), 'map' + str(featuremap_idx[j]), 'crop' + str(channel_idx)])), 'JPEG')
+    
+                        j += 1
+                    i += 1
 
-                        conv_mat -= np.min(conv_mat)
-                        conv_mat *= 255. / np.max(conv_mat)
-                        conv_mat = conv_mat.astype(np.uint8)
-                        conv_image = Image.fromarray(conv_mat, mode='L')
+        # ...with proper TF graph-building and executing.
+        images = tf.placeholder(tf.float32, shape=(2, 28, 28, 5))         # tensor shape (2, 28, 28, 5)
+        ipcrops = tf.unstack(images, axis=-1)                             # list len 5: tensors shape (2, 28, 28)
+        ipcrops = [tf.expand_dims(ipcrop, axis=-1) for ipcrop in ipcrops] # list len 5: tensors shape (2, 28, 28, 1)
+        kernels = tf.convert_to_tensor(kernels)                           # tensor shape (28, 28, 5, 16)
+        kernels = tf.unstack(kernels, axis=2)                             # list len 5: tensors shape (28, 28, 16)
+        kernels = [tf.expand_dims(kernel, axis=2) for kernel in kernels]  # list len 5: tensors shape (28, 28, 1, 16)
 
-                        conv_image.save(os.path.join(dirname, '_'.join(['im' + str(sample_idx[i]), 'map' + str(featuremap_idx[j]), 'crop' + str(channel_idx)])), 'JPEG')
+        conv_outputs = [tf.nn.conv2d(ipcrop, kernel) for ipcrop, kernel in zip(ipcrops, kernels)]   # list len 5: tensors shape (2, 28, 28, 16)
+        conv_outputs = tf.stack(conv_outputs, axis=-2)                    # tensor shape (2, 28, 28, 5, 16)
+        # TODO do I need to zero-adjust, or is it already nonnegative due to ReLU? Historically it has been nonnegative. If not nonnegative, am I misleading myself and others about negative (and therefore more meaninful) values by zero-adjusting? In that case I suspect it would be more gray than black, but who knows.
+        norm_factors = tf.reduce_max(conv_outputs, axis=(1, 2, 3)) * 255.                           # tensor shape (2, 16)
 
-                    j += 1
-                i += 1
+        
 
+        print(conv_outputs)
+        crash
+
+
+
+
+        
 
 
 def visualize_mnist_activations(architecture, full_size, background_size, num_train_ex, test_bg=None, override_id=None):
